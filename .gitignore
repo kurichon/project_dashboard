@@ -1,0 +1,20 @@
+# Local-only credentials, browser exports and profile state
+**/config.personal.js
+**/config.local.js
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.key
+**/*token*.json
+**/settings-export*.json
+**/projectPulseCache*.json
+.private/
+.build/
+dist/
+# Local tooling / generated results
+node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.zip
+.DS_Store

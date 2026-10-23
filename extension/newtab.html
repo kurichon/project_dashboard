@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project Dashboard</title>
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">PROJECT DASHBOARD</div>
+        <h1>What moved recently?</h1>
+      </div>
+      <div class="actions">
+        <span id="syncState" class="sync-state" role="status">Not connected</span>
+        <button id="settingsBtn" class="button secondary" type="button" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+        <button id="updateBtn" class="button secondary" type="button">Check updates</button>
+        <button id="connectBtn" class="button secondary" type="button" hidden>Connect Google</button>
+        <button id="accountBtn" class="button secondary" type="button" hidden>Change account</button>
+        <button id="refreshBtn" class="button" type="button" hidden>Refresh</button>
+      </div>
+    </header>
+
+    <section id="settingsPanel" class="settings-panel" hidden aria-labelledby="settingsTitle">
+      <div class="settings-head">
+        <div>
+          <h2 id="settingsTitle">Your data source</h2>
+          <p>Choose your own private Google Spreadsheet. Project Dashboard never publishes its contents.</p>
+        </div>
+        <button id="closeSettingsBtn" class="button secondary" type="button">Close</button>
+      </div>
+      <form id="settingsForm" autocomplete="off">
+        <div class="fields">
+          <label class="field wide">
+            <span>Google Spreadsheet URL or ID</span>
+            <input id="spreadsheetInput" type="text" placeholder="Paste https://docs.google.com/spreadsheets/d/…" spellcheck="false" />
+            <small>Paste the Sheet URL, not a Drive folder URL. The data remains private in your Google account.</small>
+          </label>
+          <label class="field">
+            <span>Projects tab</span>
+            <input id="projectsTabInput" type="text" placeholder="Projects" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>History tab (optional)</span>
+            <input id="historyTabInput" type="text" placeholder="History" spellcheck="false" />
+          </label>
+          <label class="field wide">
+            <span>Google OAuth Web application Client ID</span>
+            <input id="oauthClientInput" type="text" placeholder="123456-abc.apps.googleusercontent.com" spellcheck="false" />
+            <small>For a sideloaded extension, use a Web application OAuth client with the redirect URL below. No client secret is needed.</small>
+          </label>
+          <div class="field wide">
+            <span>Your extension redirect URL</span>
+            <code id="redirectUrl" class="readonly-code"></code>
+          </div>
+          <label class="field wide">
+            <span>Update repository (optional)</span>
+            <input id="releaseRepoInput" type="text" placeholder="kurichon/project_dashboard" spellcheck="false" />
+            <small>Public GitHub release metadata only. Leave blank until a release repository exists. No project data is sent to GitHub.</small>
+          </label>
+        </div>
+        <div class="settings-actions">
+          <span id="settingsMessage" class="settings-message" role="status"></span>
+          <button id="saveSettingsBtn" class="button" type="submit">Save settings</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="updateNotice" class="notice update-notice" hidden aria-live="polite">
+      <span id="updateText"></span>
+      <a id="updateLink" hidden target="_blank" rel="noopener noreferrer">View release</a>
+    </section>
+    <section id="notice" class="notice" hidden role="status"></section>
+    <section id="cards" class="cards" aria-live="polite"></section>
+    <section id="empty" class="empty" hidden>
+      <h2>No project statuses yet</h2>
+      <p>Configure a Google Sheet with <strong>Project, Status, Next, Updated</strong> columns.</p>
+    </section>
+    <footer>
+      <span>Your private Sheet → this browser only</span>
+      <span id="lastSync"></span>
+    </footer>
+  </main>
+  <script src="config.js"></script>
+  <script src="pulse-core.js"></script>
+  <script src="newtab.js"></script>
+</body>
+</html>

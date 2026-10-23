@@ -1,0 +1,39 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: JavaScript syntax and unit tests
+        run: |
+          node --check extension/newtab.js
+          node --check extension/pulse-core.js
+          node --test tests/*.test.cjs
+      - name: Release artifact sanitation and packaging
+        run: python tools/package-release.py --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-dashboard-candidate
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
+  windows-updater:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Windows in-place upgrade smoke
+        shell: pwsh
+        run: ./tests/upgrade-local.Tests.ps1
