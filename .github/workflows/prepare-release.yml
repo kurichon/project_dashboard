@@ -1,16 +1,30 @@
 name: Prepare GitHub release
 on:
+  # One explicitly owner-authorized bootstrap publication. Ordinary pushes do not publish.
+  push:
+    branches: [main]
+    paths: ['.github/workflows/prepare-release.yml']
   workflow_dispatch:
     inputs:
       release_tag:
         description: 'Version tag vX.Y.Z (must match extension/manifest.json)'
         required: true
         type: string
+      publish_release:
+        description: 'Publish after verification (otherwise leave a draft)'
+        required: true
+        default: false
+        type: boolean
 permissions:
   contents: read
+concurrency:
+  group: project-dashboard-release-${{ inputs.release_tag || 'v1.4.1' }}
+  cancel-in-progress: false
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || 'v1.4.1' }}
 jobs:
   source-tests:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish v1.4.1]'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,17 +34,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate tag and commit version
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Validate release version and notes
         run: |
           python - <<'PY'
-          import os,json,re
-          tag=os.environ['RELEASE_TAG']
-          v=json.load(open('extension/manifest.json'))['version']
-          if not re.fullmatch(r'v\d+\.\d+\.\d+',tag) or tag!='v'+v:
-              raise SystemExit('Tag must be vX.Y.Z and match the checked out manifest version')
-          print('Matched',tag)
+          import os, json, re
+          from pathlib import Path
+          tag = os.environ['RELEASE_TAG']
+          version = json.loads(Path('extension/manifest.json').read_text())['version']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag) or tag != 'v' + version:
+              raise SystemExit('Tag must be vX.Y.Z and match the checked out manifest')
+          if not Path(f'.github/release-notes/{tag}.md').is_file():
+              raise SystemExit('Reviewed release notes are required')
+          print('Validated', tag)
           PY
       - name: JavaScript and package tests
         run: |
@@ -39,14 +54,23 @@ jobs:
           node --test tests/*.test.cjs
           python -m unittest discover -s tests -p 'test_package_release.py'
           python tools/package-release.py --out dist
+      - name: Verify exact v1.4.1 repair package
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum --check SHA256SUMS.txt
+          if [ "$RELEASE_TAG" = 'v1.4.1' ]; then
+            echo '9b35021d00bb24ec73a4ab98564d8741ff90f1004960e79e5c6b695d646f5940  project-dashboard-v1.4.1.zip' | sha256sum --check
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: validated-release-assets
+          if-no-files-found: error
           path: |
             dist/project-dashboard-v*.zip
             dist/SHA256SUMS.txt
   windows-tests:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish v1.4.1]'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,30 +79,39 @@ jobs:
         run: |
           ./tests/upgrade-local.Tests.ps1
           ./tests/github-updater.Tests.ps1
-  draft-release:
-    needs: [source-tests,windows-tests]
+  release:
+    needs: [source-tests, windows-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_TAG: ${{ inputs.release_tag }}
+      PUBLISH_RELEASE: ${{ github.event_name == 'push' || inputs.publish_release }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: validated-release-assets
           path: dist
-      - name: Create draft containing checked GitHub assets
+      - name: Stage release and verify uploaded bytes before publication
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Refusing to modify an existing release $RELEASE_TAG" >&2
+            echo "Refusing to replace an existing release $RELEASE_TAG" >&2
             exit 1
           fi
-          # The owner must publish the draft after real Brave/OAuth verification.
+          (cd dist && sha256sum --check SHA256SUMS.txt)
           gh release create "$RELEASE_TAG" \
             "dist/project-dashboard-${RELEASE_TAG}.zip" "dist/SHA256SUMS.txt" \
             --target "$GITHUB_SHA" --draft \
             --title "Project Dashboard $RELEASE_TAG" \
-            --notes "Release package, SHA-256 and in-place Windows updater. Read docs/GITHUB_RELEASES.md; real Brave verification and owner approval are required before publishing as stable."
+            --notes-file ".github/release-notes/${RELEASE_TAG}.md"
+          mkdir uploaded-verification
+          gh release download "$RELEASE_TAG" --dir uploaded-verification
+          (cd uploaded-verification && sha256sum --check SHA256SUMS.txt)
+          cmp "dist/project-dashboard-${RELEASE_TAG}.zip" "uploaded-verification/project-dashboard-${RELEASE_TAG}.zip"
+          cmp dist/SHA256SUMS.txt uploaded-verification/SHA256SUMS.txt
+          if [ "$PUBLISH_RELEASE" = 'true' ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --latest
+          fi
+          gh release view "$RELEASE_TAG" --json url,tagName,isDraft,isPrerelease,targetCommitish,assets
