@@ -5,8 +5,6 @@
   const SETTINGS_KEY = 'projectPulseSettingsV3';
   const CACHE_KEY = 'projectPulseCacheV2';
   const UPDATE_KEY = 'projectPulseReleaseCheckV1';
-  const UPDATE_PENDING_KEY = 'projectDashboardPendingUpdateV1';
-  const UPDATE_INSTALLED_KEY = 'projectDashboardInstalledUpdateV1';
   const SETTINGS_BACKUP_FORMAT = 'project-dashboard-settings';
   const SETTINGS_BACKUP_VERSION = 1;
   const DEFAULTS = Object.freeze({
@@ -192,7 +190,7 @@
   }
 
   root.PulseCore = Object.freeze({
-    SETTINGS_KEY, CACHE_KEY, UPDATE_KEY, UPDATE_PENDING_KEY, UPDATE_INSTALLED_KEY, DEFAULTS,
+    SETTINGS_KEY, CACHE_KEY, UPDATE_KEY, DEFAULTS,
     createSettingsBackup, parseSettingsBackup,
     parseSpreadsheetId, parseReleaseRepo, validTab, quoteTab, normalizeSettings, validateSettings,
     sourceIdentity, rowsToObjects, headerCheck, parseSheetDate, historyCounts, compareVersions,

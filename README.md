@@ -1,111 +1,56 @@
 # Project Dashboard
 
-**A lightweight, privacy-first new-tab dashboard for project status and next actions.**
+**A lightweight, privacy-first browser new-tab dashboard for project status and next actions.**
 
-Project Dashboard runs as a local Brave/Chromium Manifest V3 extension. You
-choose a private Google Sheet for your projects; neither your data nor account
-configuration belongs in this public repository.
+Project Dashboard reads a **user-selected private Google Sheet**. The open-source repository and release ZIP contain no personal spreadsheets, OAuth IDs, tokens, or projects. Licensed under MIT.
 
-**Release state:** v1.4.0 is a *development candidate*, not yet a qualified
-public release. It is built from the functional Project Pulse v1.2.0 baseline.
+**Distribution:** [GitHub Releases](https://github.com/kurichon/project_dashboard/releases), without the Chrome Web Store. The latest v1.4 source is a candidate until verified in a real Brave installation.
 
-## What it does
+## Features
 
-- Reads project status, next action and updated time from a chosen private
-  Google Spreadsheet; displays history activity over the last seven days.
-- Stores display/source settings in browser storage, separate from source code.
-- Uses read-only Google Sheets OAuth with session-only access tokens.
-- Keeps a source-specific offline cache and validates spreadsheet headers.
-- Reads published stable GitHub release **announcements** (daily or on demand). When a newer release is announced, the manual check can ask Brave to check the Web Store. Store-installed extensions update automatically when idle; GitHub does not install executable code.
-- Exports/imports configuration-only JSON to migrate to a store extension ID without sharing tokens or cached project data.
+- Compact cards for each project: current status, next action, last update, and recent activity.
+- Select your own Spreadsheet URL/ID and Projects/History tabs; read-only Google Sheets OAuth.
+- Settings stored in Chromium profile storage, separate from the app source; Sheet-specific offline cache and malformed-history warnings.
+- Settings export/import for recovery and browser migration (contains private Sheet/OAuth IDs; **never share backup files**). No tokens or cached project data are exported.
+- Version display and daily/on-demand checks for **published stable GitHub releases**. Notification links to the release download page; unpacked extensions cannot run installers themselves.
+- Optional Windows in-place updater, with release SHA-256 verification, backup, identity preservation and no uninstall.
 
-## Installation routes
+## First-time installation
 
-- **Public users (planned):** install the published Chrome Web Store edition in Brave or Chrome. The browser owns automatic updates. The store is not published yet; this release is a candidate.
-- **Developers:** load the unpacked `extension/` directory. Unpacked extensions do **not** receive Web Store updates automatically.
-- **Migration from an older unpacked copy:** use the development-only local updater once, export settings from the old extension, then import them into the separately installed store edition. Store IDs can differ, so configuration does not transfer automatically; see [store release instructions](docs/WEB_STORE_RELEASE.md).
+1. Download the ZIP and checksum from [GitHub Releases](https://github.com/kurichon/project_dashboard/releases). Verify the ZIP against `SHA256SUMS.txt`.
+2. Extract to a permanent folder. In Brave open `brave://extensions` → Developer mode → **Load unpacked** → choose `extension/`.
+3. In the new tab, open Settings. Provide your Google Spreadsheet URL/ID, the tab names (`Projects` / `History` by default), and a Google OAuth Web client ID authorized for the exact redirect URL displayed. No client secret is used.
+4. Click **Save settings**, then **Connect Google**. The Sheets API must be enabled and the selected Google account must have access to the Sheet.
 
-## Set up an unpacked development installation
+Required Projects headers: `Project | Status | Next | Updated`. Optional History headers: `Timestamp | Project`. A Google Drive folder picker is out of scope; only a selected Sheet is read.
 
-1. Extract the repository or release package to a permanent folder.
-2. Go to `brave://extensions`, enable **Developer mode**, select **Load unpacked**
-   and choose the `extension/` folder.
-3. Open a new tab and choose **Settings**. Copy the displayed extension redirect URL.
-4. For your own sideloaded build, configure a Google Cloud OAuth *Web application*
-   client with that exact redirect URL, enable Sheets API, and authorize the Google
-   account permitted to view your Sheet. Do not embed a Web client secret.
-5. Enter your OAuth **client ID**, private Spreadsheet URL or ID, and optionally
-   customize the `Projects` and `History` tab names. Click **Save settings**,
-   then **Connect Google**.
+## Update without uninstalling
 
-Existing project sheet headers:
+The extension checks GitHub for new releases but **does not install them automatically**.
 
-- Projects: `Project | Status | Next | Updated`
-- History: `Timestamp | Project` (optional; blank History tab setting disables counts)
+**Windows — easiest after first setup:** keep `Update Project Dashboard.cmd` and the `tools/` directory from a verified release in a permanent location. Double-click the launcher when notified (or any time you want to check). The updater remembers your existing extension folder, downloads the latest stable ZIP, validates its checksum, and updates files in place with a recovery backup. Go to `brave://extensions` and click **Reload** on the existing extension. No uninstall or new extension ID is intended.
 
-A Drive **folder** picker is not included: it would require broader permissions
-than reading a single selected Sheet. Other users can use their own Spreadsheet
-URL or ID without publishing its contents.
+**Windows — fully offline:** extract the release ZIP and invoke `tools/upgrade-local.ps1 -InstallDir <existing-extension-folder> -Package <release.zip> -ExpectedSha256 <checksum>`.
 
-## Upgrade an existing Project Pulse installation
+**Other operating systems:** preserve the same unpacked folder and manifest identity when replacing source files; do not remove/reinstall the extension. The bundled Windows updater does not run on macOS or Linux.
 
-**Do not uninstall, remove or load a second copy**. Upgrade the existing unpacked
-extension directory to preserve the browser's extension identity and local settings.
+See [GitHub release and migration guide](docs/GITHUB_RELEASES.md) for exact procedures, release publishing and recovery.
 
-1. Retain your currently installed extension folder and current browser profile.
-2. Obtain a verified release ZIP containing `extension/` and `tools/`.
-3. With Windows PowerShell, run:
-
-   ```powershell
-   powershell.exe -NoProfile -File "<extracted>\tools\upgrade-local.ps1" -InstallDir "<YOUR_INSTALLED_EXTENSION_FOLDER>" -Package "<RELEASE_ZIP>"
-   ```
-
-4. The helper retains the existing extension manifest `key` (if one exists),
-   your original local `config.js`, and a dated recovery copy of application
-   files. In `brave://extensions`, select **Reload** on the *same* extension.
-5. Verify Sheets access, cards, history counts, settings and update notice.
-
-The in-place helper allows either the legacy manifest name **Project Pulse** or
-**Project Dashboard** and refuses unrelated extensions. Older `projectPulse*`
-storage keys are intentionally kept for migration; they are **not** a branding bug.
-
-If upgrading without a stable extension identity, verify the existing extension
-ID and Chrome OAuth redirect before/after. Replacing files in the same unpacked
-folder is not equivalent to uninstalling. Real Brave/OAuth behavior must be
-verified on your device.
-
-## Project structure
-
-- `extension/` — installable unpacked extension code; `config.js` is a blank
-  migration compatibility shim.
-- `tools/upgrade-local.ps1` — development-only offline legacy migration helper, **not shipped in the store ZIP**.
-- `tools/package-release.py` — deterministic sanitized GitHub/developer and store-ready ZIPs + SHA-256 checksums.
-- `tests/` — unit, browser-mocked and Windows-updater tests.
-- `.github/workflows/ci.yml` — static/unit and updater regression checks.
-
-## Developing and checking changes
+## Development
 
 ```sh
-node --test tests/pulse-core.test.cjs
 node --check extension/newtab.js
 node --check extension/pulse-core.js
+node --test tests/*.test.cjs
+python -m unittest discover -s tests -p 'test_package_release.py'
 python tools/package-release.py --out dist
 ```
 
-`python tests/browser-store-smoke.py` (and the previous `python tests/browser-smoke.py`) exercises the UI against intercepted network
-responses and simulated extension APIs, provided Playwright and Chromium are
-installed. It does **not** validate real OAuth, extension installation, or
-Brave runtime behavior. Release qualification remains a separate gate.
+GitHub Actions runs source/packaging checks and Windows updater regression. Browser mocks are not proof of live Brave or Google authentication.
 
-## Privacy and open source
+## Privacy and security
 
-The source is MIT-licensed (see [LICENSE](LICENSE)). Read [PRIVACY.md](PRIVACY.md)
-and [SECURITY.md](SECURITY.md). Never commit credentials, tokens, actual Sheet
-IDs, projects/history exports or generated browser settings. The default release
-repository is this public, code-only GitHub repository.
-
-**Store packaging:** `python tools/package-release.py --out dist` produces two archives. Upload only `project-dashboard-webstore-vX.Y.Z.zip` to the Chrome Web Store; its `manifest.json` is at the root. The GitHub/developer ZIP has a different layout and contains the legacy updater.
-
-**Known limitation:** Each user needs an OAuth Web client permitted
-for their installed redirect URL. A broadly distributed one-click installation
-requires separately qualified OAuth and browser-store distribution. GitHub only announces releases; store-installed copies are updated by Brave, while unpacked copies still require an explicit local upgrade.
+- The repo's `extension/config.js` is intentionally blank; existing personal local config is preserved during upgrades.
+- OAuth access tokens reside only in `chrome.storage.session`. Spreadsheet settings/cache reside in the local browser profile.
+- The app requests read-only Sheets access and optionally checks GitHub's public release API; there is no telemetry, account syncing, or Drive folder enumeration.
+- See [PRIVACY.md](PRIVACY.md), [SECURITY.md](SECURITY.md), [LICENSE](LICENSE), and [CHANGELOG.md](CHANGELOG.md).

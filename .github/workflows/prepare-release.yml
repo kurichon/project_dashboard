@@ -1,0 +1,84 @@
+name: Prepare GitHub release
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Version tag vX.Y.Z (must match extension/manifest.json)'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  source-tests:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate tag and commit version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          python - <<'PY'
+          import os,json,re
+          tag=os.environ['RELEASE_TAG']
+          v=json.load(open('extension/manifest.json'))['version']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+',tag) or tag!='v'+v:
+              raise SystemExit('Tag must be vX.Y.Z and match the checked out manifest version')
+          print('Matched',tag)
+          PY
+      - name: JavaScript and package tests
+        run: |
+          node --check extension/newtab.js
+          node --check extension/pulse-core.js
+          node --test tests/*.test.cjs
+          python -m unittest discover -s tests -p 'test_package_release.py'
+          python tools/package-release.py --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validated-release-assets
+          path: |
+            dist/project-dashboard-v*.zip
+            dist/SHA256SUMS.txt
+  windows-tests:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: In-place and downloaded update simulations
+        shell: pwsh
+        run: |
+          ./tests/upgrade-local.Tests.ps1
+          ./tests/github-updater.Tests.ps1
+  draft-release:
+    needs: [source-tests,windows-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-release-assets
+          path: dist
+      - name: Create draft containing checked GitHub assets
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Refusing to modify an existing release $RELEASE_TAG" >&2
+            exit 1
+          fi
+          # The owner must publish the draft after real Brave/OAuth verification.
+          gh release create "$RELEASE_TAG" \
+            "dist/project-dashboard-${RELEASE_TAG}.zip" "dist/SHA256SUMS.txt" \
+            --target "$GITHUB_SHA" --draft \
+            --title "Project Dashboard $RELEASE_TAG" \
+            --notes "Release package, SHA-256 and in-place Windows updater. Read docs/GITHUB_RELEASES.md; real Brave verification and owner approval are required before publishing as stable."

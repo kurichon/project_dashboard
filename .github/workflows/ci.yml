@@ -17,31 +17,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: JavaScript syntax and unit tests
+      - name: JS syntax and behavior checks
         run: |
           node --check extension/newtab.js
           node --check extension/pulse-core.js
-          node --check extension/background.js
           node --test tests/*.test.cjs
-      - name: Store and developer package verification
+      - name: GitHub release ZIP and SHA256 contracts
         run: |
           python tools/package-release.py --out dist
           python -m unittest discover -s tests -p 'test_package_release.py'
-      - name: Mocked browser UI smoke
+      - name: Mocked Chromium UI
         run: |
           python -m pip install playwright
           python -m playwright install --with-deps chromium
-          python tests/browser-store-smoke.py
+          python tests/browser-github-smoke.py
       - uses: actions/upload-artifact@v4
         with:
-          name: project-dashboard-v1.4-candidates
+          name: project-dashboard-github-release-candidate
           path: |
-            dist/*.zip
+            dist/project-dashboard-v*.zip
             dist/SHA256SUMS.txt
   windows-updater:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Legacy in-place upgrade smoke (development only)
+      - name: Existing in-place updater regression
         shell: pwsh
         run: ./tests/upgrade-local.Tests.ps1
+      - name: GitHub download/updater regression (mocked)
+        shell: pwsh
+        run: ./tests/github-updater.Tests.ps1

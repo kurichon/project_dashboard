@@ -16,7 +16,7 @@ tab names and chosen release repository are stored in `chrome.storage.local`.
 The OAuth access token is held in `chrome.storage.session`. Tokens are not
 included in release packages, and the extension does not collect telemetry.
 
-**Updates:** Release news checks contact GitHub's public API without transmitting the Sheet ID or project rows. Chrome Web Store installations receive browser-managed updates; the extension does not download executable updates from GitHub. A user-initiated check requests a browser store check only after a newer GitHub release is known. Local development installations do not auto-update.
+**Updates:** The extension can check published stable release metadata from the public GitHub API without sending your Sheet ID, project data, or tokens. It cannot install updates itself. If you separately launch the Windows updater, that local script contacts GitHub for a release ZIP and checksum and updates the existing unpacked extension directory. The updater remembers only your chosen local installation path under `%LOCALAPPDATA%` and does not access your Google account.
 
 **External services:** Google supplies OAuth and the Sheets API; GitHub supplies
 optional public release metadata. Their respective service policies apply.

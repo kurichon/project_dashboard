@@ -20,7 +20,7 @@ try {
     if ((Get-Content (Join-Path $install 'config.js') -Raw) -notmatch 'LOCAL_EXAMPLE_ID') { throw 'Legacy local configuration was lost.' }
     if ((Get-Content (Join-Path $install 'newtab.js') -Raw) -eq 'OLD') { throw 'Source files did not upgrade.' }
     if (-not (Test-Path (Join-Path $install 'icons/icon128.png'))) { throw 'Recursive icon migration failed.' }
-    if (-not (Test-Path (Join-Path $install 'background.js'))) { throw 'Browser update worker missing.' }
+    if (Test-Path (Join-Path $install 'background.js')) { throw 'Store-only background worker must not ship in GitHub package.' }
     $backups=Get-ChildItem $tmp -Directory | Where-Object {$_.Name -like 'installed.previous-*'}
     if ($backups.Count -ne 1) { throw 'Expected exactly one recovery backup.' }
     if ((Get-Content (Join-Path $backups[0].FullName 'newtab.js') -Raw) -ne 'OLD') { throw 'Recovery backup lost original source.' }
@@ -29,7 +29,7 @@ try {
     if (-not $failed) { throw 'Wrong checksum was accepted.' }
     $still=Get-Content (Join-Path $install 'manifest.json') -Raw | ConvertFrom-Json
     if ($still.version -ne '1.4.0') { throw 'Checksum failure changed installed version.' }
-    Write-Host 'PASS updater: rebrand, unchanged public key/config, backup, checksum rejection'
+    Write-Host 'PASS updater: legacy rebrand, ID/config unchanged, backup, checksum failure safety'
 } finally {
     if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
 }

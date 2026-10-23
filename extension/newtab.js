@@ -251,35 +251,18 @@ async function sync(interactive = false) {
   } finally { setBusy(false); }
 }
 
-async function showBrowserUpdateState() {
-  const local = await chrome.storage.local.get([Core.UPDATE_PENDING_KEY, Core.UPDATE_INSTALLED_KEY]);
-  const pending = local[Core.UPDATE_PENDING_KEY];
-  const installed = local[Core.UPDATE_INSTALLED_KEY];
-  if (pending?.version && Core.compareVersions(pending.version, APP_VERSION) > 0) {
-    updateMessage(`Brave downloaded v${pending.version}. It will install when this extension becomes idle. Close open Project Dashboard tabs to let the browser finish.`);
-    return true;
-  }
-  if (installed?.to === APP_VERSION && installed.from !== installed.to) {
-    updateMessage(`Updated automatically from v${installed.from} to v${installed.to}.`);
-    // Display the successful update once, not on every new tab forever.
-    await chrome.storage.local.remove(Core.UPDATE_INSTALLED_KEY);
-    return true;
-  }
-  return false;
-}
-
 async function checkUpdates(manual = false) {
   if (checkingUpdates) return;
   if (!settings.releaseRepo) {
-    if (manual) updateMessage('No release repository configured. Store-installed extensions are updated automatically by Brave.');
+    if (manual) updateMessage('Set a public GitHub release repository in Settings to check for updates.');
     return;
   }
   const repo = settings.releaseRepo;
-  const local = await chrome.storage.local.get(Core.UPDATE_KEY);
-  const previous = local[Core.UPDATE_KEY];
+  const stored = await chrome.storage.local.get(Core.UPDATE_KEY);
+  const previous = stored[Core.UPDATE_KEY];
   if (!manual && previous?.repo === repo && Date.now() - previous.checkedAt < UPDATE_INTERVAL_MS) {
     if (previous.tag && Core.compareVersions(previous.tag, APP_VERSION) > 0) {
-      updateMessage(`Release ${previous.tag} announced. Brave installs store updates automatically; it may take time to reach you.`, Core.releasePageUrl(repo));
+      updateMessage(`Project Dashboard ${previous.tag} is available (installed: v${APP_VERSION}). Get the release ZIP and run its updater; do not uninstall the extension.`, Core.releasePageUrl(repo));
     }
     return;
   }
@@ -289,39 +272,25 @@ async function checkUpdates(manual = false) {
   try {
     const response = await fetch(Core.releaseApiUrl(repo), {cache: 'no-store', headers: {Accept: 'application/vnd.github+json'}});
     if (response.status === 404) {
-      if (manual) updateMessage('No published GitHub Release yet. Brave manages updates for store installations automatically.');
+      if (manual) updateMessage('There are no published stable GitHub releases yet. Your installed extension is unchanged.');
       return;
     }
     if (!response.ok) throw new Error(`GitHub release check failed (HTTP ${response.status}).`);
     const data = await response.json();
     if (repo !== settings.releaseRepo) return;
-    if (data.draft || data.prerelease || !data.tag_name) throw new Error('No stable release version is available.');
+    if (data.draft || data.prerelease || !data.tag_name) throw new Error('No stable GitHub release is available.');
     const diff = Core.compareVersions(data.tag_name, APP_VERSION);
-    if (diff === null) throw new Error('Latest release tag is not in v1.2.3 format.');
+    if (diff === null) throw new Error('The latest GitHub release tag is not in v1.2.3 format.');
     await chrome.storage.local.set({[Core.UPDATE_KEY]: {repo, checkedAt: Date.now(), tag: data.tag_name}});
     if (diff > 0) {
-      if (manual && typeof chrome.runtime.requestUpdateCheck === 'function') {
-        try {
-          // Only ask the browser when a newer version is confirmed, never on a timer.
-          const result = await chrome.runtime.requestUpdateCheck();
-          if (result?.status === 'update_available') {
-            updateMessage(`Brave found ${result.version || data.tag_name}. Installation is automatic once the extension is idle.`, Core.releasePageUrl(repo));
-            return;
-          }
-          if (result?.status === 'no_update') {
-            updateMessage(`${data.tag_name} is announced on GitHub but not offered by this browser yet. Store rollout may be pending; unpacked copies require a manual upgrade.`, Core.releasePageUrl(repo));
-            return;
-          }
-        } catch (_) { /* Unpacked installations and some Brave versions may not support a store check. */ }
-      }
-      updateMessage(`${data.tag_name} announced on GitHub. Brave installs published store updates automatically; unpacked copies do not auto-update.`, Core.releasePageUrl(repo));
+      updateMessage(`Project Dashboard ${data.tag_name} is available (installed: v${APP_VERSION}). Download the release ZIP and use the included updater to preserve your extension and settings.`, Core.releasePageUrl(repo));
     } else if (manual) {
-      updateMessage(`No newer GitHub release announced (installed v${APP_VERSION}). Brave checks store updates automatically.`);
+      updateMessage(`You're up to date (v${APP_VERSION}).`);
     } else {
-      await showBrowserUpdateState().then(shown => { if (!shown) updateMessage(''); });
+      updateMessage('');
     }
   } catch (e) {
-    if (manual) updateMessage(e?.message || 'Could not check GitHub releases. Browser-managed updates continue independently.');
+    if (manual) updateMessage(e?.message || 'Could not check GitHub releases. The installed version was not changed.');
   } finally {
     checkingUpdates = false;
     ui.updateBtn.disabled = false;
@@ -452,8 +421,7 @@ ui.updateBtn.addEventListener('click', () => checkUpdates(true));
       if (hadCache) ui.syncState.textContent = 'Cached snapshot';
       await sync(false);
     }
-    const hadUpdateEvent = await showBrowserUpdateState();
-    if (!hadUpdateEvent) await checkUpdates(false);
+    await checkUpdates(false);
   } catch (e) {
     ui.syncState.textContent = 'Setup error';
     setNotice(e?.message || 'Could not initialize Project Dashboard. Please check browser extension storage.', true);

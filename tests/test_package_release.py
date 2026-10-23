@@ -1,48 +1,47 @@
-"""Sanitized package contracts for GitHub legacy and the Chrome Web Store."""
-import hashlib
+"""Privacy, update package layout and deterministic GitHub Release assets."""
+import importlib.util
 import json
+import hashlib
 from pathlib import Path
 import tempfile
 import unittest
-import zipfile
-import importlib.util
-ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('package_release', ROOT/'tools'/'package-release.py')
-module = importlib.util.module_from_spec(spec)
+from zipfile import ZipFile
+ROOT=Path(__file__).resolve().parents[1]
+spec=importlib.util.spec_from_file_location('packaging',ROOT/'tools'/'package-release.py')
+module=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-build = module.build
 
-class Packages(unittest.TestCase):
-    def test_packages_are_deterministic_distinct_and_sanitized(self):
-        with tempfile.TemporaryDirectory() as d:
-            out=Path(d)
-            developer,store,sums=build(out)
-            with zipfile.ZipFile(developer) as z:
+class GitHubPackage(unittest.TestCase):
+    def test_single_package_and_deterministic_hash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            archive,checksums=module.build(Path(folder))
+            self.assertEqual(archive.name,'project-dashboard-v1.4.0.zip')
+            self.assertEqual(checksums.name,'SHA256SUMS.txt')
+            self.assertEqual(len(list(Path(folder).glob('*.zip'))),1)
+            with ZipFile(archive) as z:
                 names=set(z.namelist())
-                self.assertIn('tools/upgrade-local.ps1',names)
                 self.assertIn('extension/manifest.json',names)
+                self.assertIn('tools/upgrade-local.ps1',names)
+                self.assertIn('tools/update-from-github.ps1',names)
+                self.assertIn('Update Project Dashboard.cmd',names)
+                self.assertIn('LICENSE',names)
+                self.assertIn('docs/GITHUB_RELEASES.md',names)
                 self.assertNotIn('manifest.json',names)
-            with zipfile.ZipFile(store) as z:
-                names=set(z.namelist())
-                self.assertIn('manifest.json',names)
-                self.assertNotIn('tools/upgrade-local.ps1',names)
-                self.assertNotIn('README.md',names)
-                self.assertTrue(all(not n.endswith('.pem') for n in names))
-                config=z.read('config.js').decode('utf-8')
+                self.assertNotIn('docs/WEB_STORE_RELEASE.md',names)
+                self.assertNotIn('extension/background.js',names)
+                self.assertTrue(all(not name.endswith(('.pem','.p12','.pfx','.key')) for name in names))
+                manifest=json.loads(z.read('extension/manifest.json'))
+                self.assertNotIn('key',manifest)
+                self.assertNotIn('background',manifest)
+                config=z.read('extension/config.js').decode()
                 self.assertIn("oauthClientId: ''",config)
                 self.assertIn("spreadsheetId: ''",config)
-                manifest=json.loads(z.read('manifest.json'))
-                self.assertNotIn('key',manifest)
-                self.assertEqual(manifest['background']['service_worker'],'background.js')
-                for size in ('16','48','128'):
-                    icon=manifest['icons'][size]
-                    self.assertIn(icon,names)
-                    self.assertTrue(z.read(icon).startswith(b'\x89PNG\r\n\x1a\n'))
-            checksums=sums.read_text()
-            for archive in (developer,store):
-                self.assertIn(f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}", checksums)
-                original=archive.read_bytes()
-                build(out)
-                self.assertEqual(original,archive.read_bytes())
+                for size in (16,48,128):
+                    icon=manifest['icons'][str(size)]
+                    self.assertTrue(z.read('extension/'+icon).startswith(b'\x89PNG\r\n\x1a\n'))
+            content=archive.read_bytes()
+            self.assertEqual(checksums.read_text(),f'{hashlib.sha256(content).hexdigest()}  {archive.name}\n')
+            module.build(Path(folder))
+            self.assertEqual(archive.read_bytes(),content)
 
-if __name__=='__main__':unittest.main()
+if __name__=='__main__': unittest.main()
