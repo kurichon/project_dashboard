@@ -49,8 +49,12 @@ try {
     # Full copy for recovery before changing a single installed application file.
     Copy-Item -LiteralPath $installed -Destination $backup -Recurse -Force
     $copied = $true
-    Get-ChildItem -LiteralPath $incoming -File | Where-Object {$_.Name -ne 'manifest.json'} | ForEach-Object {
-        $target = Join-Path $installed $_.Name
+    # Copy nested bundled assets (icons/background) as well as top-level scripts.
+    Get-ChildItem -LiteralPath $incoming -File -Recurse | Where-Object {$_.FullName -ne $newManifest} | ForEach-Object {
+        $relative = $_.FullName.Substring($incoming.Length).TrimStart([char[]]@([char]'\',[char]'/'))
+        $target = Join-Path $installed $relative
+        $parent = Split-Path -Parent $target
+        if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
         if (-not (Test-Path -LiteralPath $target)) { $script:addedFiles += $target }
         Copy-Item -LiteralPath $_.FullName -Destination $target -Force
     }
@@ -61,8 +65,12 @@ try {
 } catch {
     if ($copied -and (Test-Path -LiteralPath $backup)) {
         Write-Warning 'Update failed. Restoring original extension files from recovery backup.'
-        Get-ChildItem -LiteralPath $backup -File | ForEach-Object {
-            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $installed $_.Name) -Force
+        Get-ChildItem -LiteralPath $backup -File -Recurse | ForEach-Object {
+            $relative = $_.FullName.Substring($backup.Length).TrimStart([char[]]@([char]'\',[char]'/'))
+            $target = Join-Path $installed $relative
+            $parent = Split-Path -Parent $target
+            if (-not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+            Copy-Item -LiteralPath $_.FullName -Destination $target -Force
         }
         foreach ($file in $addedFiles) {
             if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }

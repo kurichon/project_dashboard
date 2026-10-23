@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Project Dashboard",
-  "version": "1.3.0",
-  "description": "A private, lightweight new-tab project dashboard backed by a user-selected Google Sheet.",
+  "version": "1.4.0",
+  "description": "A private new-tab dashboard for project progress, next actions, and recent activity.",
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
@@ -16,5 +16,13 @@
   ],
   "content_security_policy": {
     "extension_pages": "default-src 'self'; connect-src https://sheets.googleapis.com https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
   }
 }

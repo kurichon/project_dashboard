@@ -21,12 +21,20 @@ jobs:
         run: |
           node --check extension/newtab.js
           node --check extension/pulse-core.js
+          node --check extension/background.js
           node --test tests/*.test.cjs
-      - name: Release artifact sanitation and packaging
-        run: python tools/package-release.py --out dist
+      - name: Store and developer package verification
+        run: |
+          python tools/package-release.py --out dist
+          python -m unittest discover -s tests -p 'test_package_release.py'
+      - name: Mocked browser UI smoke
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          python tests/browser-store-smoke.py
       - uses: actions/upload-artifact@v4
         with:
-          name: project-dashboard-candidate
+          name: project-dashboard-v1.4-candidates
           path: |
             dist/*.zip
             dist/SHA256SUMS.txt
@@ -34,6 +42,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Windows in-place upgrade smoke
+      - name: Legacy in-place upgrade smoke (development only)
         shell: pwsh
         run: ./tests/upgrade-local.Tests.ps1

@@ -16,3 +16,7 @@ backups and do not remove/reinstall to upgrade.
 
 This repository does not claim to have completed real-browser release
 qualification. See the README for current limitations and manual checks.
+
+## Store distribution
+
+Public Web Store ZIPs contain only extension source and bundled assets, never the legacy PowerShell updater, downloaded executable code, tokens, private extension keys, Sheet exports, or local settings backups. Never upload your personal configuration or `.pem` to GitHub or the Chrome Web Store. New extension IDs require explicit settings export/import and OAuth redirect review.

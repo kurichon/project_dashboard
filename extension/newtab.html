@@ -62,9 +62,15 @@
           </label>
         </div>
         <div class="settings-actions">
-          <span id="settingsMessage" class="settings-message" role="status"></span>
+          <div class="settings-tools">
+            <button id="exportSettingsBtn" class="button secondary" type="button">Export settings</button>
+            <button id="importSettingsBtn" class="button secondary" type="button">Import settings</button>
+            <input id="importSettingsFile" type="file" accept=".json,application/json" hidden />
+          </div>
           <button id="saveSettingsBtn" class="button" type="submit">Save settings</button>
         </div>
+        <p class="settings-backup-help">For migration between extension IDs or browser profiles. The exported file includes your private Sheet ID and OAuth client ID, but never tokens or cached project data. Store it privately.</p>
+        <p id="settingsMessage" class="settings-message" role="status"></p>
       </form>
     </section>
 
@@ -81,6 +87,7 @@
     <footer>
       <span>Your private Sheet → this browser only</span>
       <span id="lastSync"></span>
+      <span id="versionInfo" aria-label="Installed application version"></span>
     </footer>
   </main>
   <script src="config.js"></script>

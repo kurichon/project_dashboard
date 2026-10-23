@@ -6,7 +6,7 @@ Project Dashboard runs as a local Brave/Chromium Manifest V3 extension. You
 choose a private Google Sheet for your projects; neither your data nor account
 configuration belongs in this public repository.
 
-**Release state:** v1.3.0 is a *development candidate*, not yet a qualified
+**Release state:** v1.4.0 is a *development candidate*, not yet a qualified
 public release. It is built from the functional Project Pulse v1.2.0 baseline.
 
 ## What it does
@@ -16,10 +16,16 @@ public release. It is built from the functional Project Pulse v1.2.0 baseline.
 - Stores display/source settings in browser storage, separate from source code.
 - Uses read-only Google Sheets OAuth with session-only access tokens.
 - Keeps a source-specific offline cache and validates spreadsheet headers.
-- Checks published **stable** GitHub release metadata (daily or via a button)
-  and links to the release page. **Checking is not installing.**
+- Reads published stable GitHub release **announcements** (daily or on demand). When a newer release is announced, the manual check can ask Brave to check the Web Store. Store-installed extensions update automatically when idle; GitHub does not install executable code.
+- Exports/imports configuration-only JSON to migrate to a store extension ID without sharing tokens or cached project data.
 
-## Set up a new installation
+## Installation routes
+
+- **Public users (planned):** install the published Chrome Web Store edition in Brave or Chrome. The browser owns automatic updates. The store is not published yet; this release is a candidate.
+- **Developers:** load the unpacked `extension/` directory. Unpacked extensions do **not** receive Web Store updates automatically.
+- **Migration from an older unpacked copy:** use the development-only local updater once, export settings from the old extension, then import them into the separately installed store edition. Store IDs can differ, so configuration does not transfer automatically; see [store release instructions](docs/WEB_STORE_RELEASE.md).
+
+## Set up an unpacked development installation
 
 1. Extract the repository or release package to a permanent folder.
 2. Go to `brave://extensions`, enable **Developer mode**, select **Load unpacked**
@@ -72,8 +78,8 @@ verified on your device.
 
 - `extension/` — installable unpacked extension code; `config.js` is a blank
   migration compatibility shim.
-- `tools/upgrade-local.ps1` — offline, user-triggered Windows in-place updater.
-- `tools/package-release.py` — deterministic sanitized ZIP + SHA-256 creation.
+- `tools/upgrade-local.ps1` — development-only offline legacy migration helper, **not shipped in the store ZIP**.
+- `tools/package-release.py` — deterministic sanitized GitHub/developer and store-ready ZIPs + SHA-256 checksums.
 - `tests/` — unit, browser-mocked and Windows-updater tests.
 - `.github/workflows/ci.yml` — static/unit and updater regression checks.
 
@@ -86,7 +92,7 @@ node --check extension/pulse-core.js
 python tools/package-release.py --out dist
 ```
 
-`python tests/browser-smoke.py` exercises the UI against intercepted network
+`python tests/browser-store-smoke.py` (and the previous `python tests/browser-smoke.py`) exercises the UI against intercepted network
 responses and simulated extension APIs, provided Playwright and Chromium are
 installed. It does **not** validate real OAuth, extension installation, or
 Brave runtime behavior. Release qualification remains a separate gate.
@@ -98,7 +104,8 @@ and [SECURITY.md](SECURITY.md). Never commit credentials, tokens, actual Sheet
 IDs, projects/history exports or generated browser settings. The default release
 repository is this public, code-only GitHub repository.
 
-**Known limitation:** Each sideloaded user needs an OAuth Web client permitted
+**Store packaging:** `python tools/package-release.py --out dist` produces two archives. Upload only `project-dashboard-webstore-vX.Y.Z.zip` to the Chrome Web Store; its `manifest.json` is at the root. The GitHub/developer ZIP has a different layout and contains the legacy updater.
+
+**Known limitation:** Each user needs an OAuth Web client permitted
 for their installed redirect URL. A broadly distributed one-click installation
-requires separately qualified OAuth and browser-store distribution. The updater
-is notification-first, not an automatic executable downloader.
+requires separately qualified OAuth and browser-store distribution. GitHub only announces releases; store-installed copies are updated by Brave, while unpacked copies still require an explicit local upgrade.

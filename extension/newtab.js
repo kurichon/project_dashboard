@@ -18,11 +18,14 @@ const ui = {
   redirectUrl: $('#redirectUrl'), settingsMessage: $('#settingsMessage'), saveSettingsBtn: $('#saveSettingsBtn'),
   connectBtn: $('#connectBtn'), accountBtn: $('#accountBtn'), refreshBtn: $('#refreshBtn'),
   syncState: $('#syncState'), lastSync: $('#lastSync'), updateBtn: $('#updateBtn'),
-  updateNotice: $('#updateNotice'), updateText: $('#updateText'), updateLink: $('#updateLink')
+  updateNotice: $('#updateNotice'), updateText: $('#updateText'), updateLink: $('#updateLink'),
+  exportSettingsBtn: $('#exportSettingsBtn'), importSettingsBtn: $('#importSettingsBtn'),
+  importSettingsFile: $('#importSettingsFile'), versionInfo: $('#versionInfo')
 };
 let settings = Core.normalizeSettings(Core.DEFAULTS);
 let busy = false;
 let checkingUpdates = false;
+ui.versionInfo.textContent = `v${APP_VERSION}`;
 
 function setNotice(text = '', error = false) {
   ui.notice.textContent = text;
@@ -248,18 +251,35 @@ async function sync(interactive = false) {
   } finally { setBusy(false); }
 }
 
+async function showBrowserUpdateState() {
+  const local = await chrome.storage.local.get([Core.UPDATE_PENDING_KEY, Core.UPDATE_INSTALLED_KEY]);
+  const pending = local[Core.UPDATE_PENDING_KEY];
+  const installed = local[Core.UPDATE_INSTALLED_KEY];
+  if (pending?.version && Core.compareVersions(pending.version, APP_VERSION) > 0) {
+    updateMessage(`Brave downloaded v${pending.version}. It will install when this extension becomes idle. Close open Project Dashboard tabs to let the browser finish.`);
+    return true;
+  }
+  if (installed?.to === APP_VERSION && installed.from !== installed.to) {
+    updateMessage(`Updated automatically from v${installed.from} to v${installed.to}.`);
+    // Display the successful update once, not on every new tab forever.
+    await chrome.storage.local.remove(Core.UPDATE_INSTALLED_KEY);
+    return true;
+  }
+  return false;
+}
+
 async function checkUpdates(manual = false) {
   if (checkingUpdates) return;
   if (!settings.releaseRepo) {
-    if (manual) { updateMessage('Set a public GitHub release repository in Settings first.'); showSettings(true); }
+    if (manual) updateMessage('No release repository configured. Store-installed extensions are updated automatically by Brave.');
     return;
   }
   const repo = settings.releaseRepo;
   const local = await chrome.storage.local.get(Core.UPDATE_KEY);
   const previous = local[Core.UPDATE_KEY];
-  if (!manual && previous?.repo === repo && Date.now()-previous.checkedAt < UPDATE_INTERVAL_MS) {
+  if (!manual && previous?.repo === repo && Date.now() - previous.checkedAt < UPDATE_INTERVAL_MS) {
     if (previous.tag && Core.compareVersions(previous.tag, APP_VERSION) > 0) {
-      updateMessage(`Project Dashboard ${previous.tag} is available (installed: ${APP_VERSION}).`, Core.releasePageUrl(repo));
+      updateMessage(`Release ${previous.tag} announced. Brave installs store updates automatically; it may take time to reach you.`, Core.releasePageUrl(repo));
     }
     return;
   }
@@ -268,20 +288,40 @@ async function checkUpdates(manual = false) {
   ui.updateBtn.textContent = 'Checking…';
   try {
     const response = await fetch(Core.releaseApiUrl(repo), {cache: 'no-store', headers: {Accept: 'application/vnd.github+json'}});
-    if (!response.ok) throw new Error(response.status === 404 ? 'No published release found, or repository is private.' : `GitHub release check failed (HTTP ${response.status}).`);
+    if (response.status === 404) {
+      if (manual) updateMessage('No published GitHub Release yet. Brave manages updates for store installations automatically.');
+      return;
+    }
+    if (!response.ok) throw new Error(`GitHub release check failed (HTTP ${response.status}).`);
     const data = await response.json();
     if (repo !== settings.releaseRepo) return;
     if (data.draft || data.prerelease || !data.tag_name) throw new Error('No stable release version is available.');
     const diff = Core.compareVersions(data.tag_name, APP_VERSION);
-    if (diff === null) throw new Error('Latest release tag is not in v1.2.3 version format.');
-    await chrome.storage.local.set({[Core.UPDATE_KEY]: {repo, checkedAt:Date.now(), tag:data.tag_name}});
+    if (diff === null) throw new Error('Latest release tag is not in v1.2.3 format.');
+    await chrome.storage.local.set({[Core.UPDATE_KEY]: {repo, checkedAt: Date.now(), tag: data.tag_name}});
     if (diff > 0) {
-      updateMessage(`Project Dashboard ${data.tag_name} is available (installed: ${APP_VERSION}).`, Core.releasePageUrl(repo));
+      if (manual && typeof chrome.runtime.requestUpdateCheck === 'function') {
+        try {
+          // Only ask the browser when a newer version is confirmed, never on a timer.
+          const result = await chrome.runtime.requestUpdateCheck();
+          if (result?.status === 'update_available') {
+            updateMessage(`Brave found ${result.version || data.tag_name}. Installation is automatic once the extension is idle.`, Core.releasePageUrl(repo));
+            return;
+          }
+          if (result?.status === 'no_update') {
+            updateMessage(`${data.tag_name} is announced on GitHub but not offered by this browser yet. Store rollout may be pending; unpacked copies require a manual upgrade.`, Core.releasePageUrl(repo));
+            return;
+          }
+        } catch (_) { /* Unpacked installations and some Brave versions may not support a store check. */ }
+      }
+      updateMessage(`${data.tag_name} announced on GitHub. Brave installs published store updates automatically; unpacked copies do not auto-update.`, Core.releasePageUrl(repo));
     } else if (manual) {
-      updateMessage(`You're up to date (v${APP_VERSION}).`);
-    } else { updateMessage(''); }
+      updateMessage(`No newer GitHub release announced (installed v${APP_VERSION}). Brave checks store updates automatically.`);
+    } else {
+      await showBrowserUpdateState().then(shown => { if (!shown) updateMessage(''); });
+    }
   } catch (e) {
-    if (manual) updateMessage(e?.message || 'Could not check releases.');
+    if (manual) updateMessage(e?.message || 'Could not check GitHub releases. Browser-managed updates continue independently.');
   } finally {
     checkingUpdates = false;
     ui.updateBtn.disabled = false;
@@ -304,6 +344,68 @@ async function loadSettings() {
   return migrated;
 }
 
+async function applySettings(updated, fromImport = false) {
+  const sourceChanged = Core.sourceIdentity(settings) !== Core.sourceIdentity(updated);
+  const authChanged = settings.oauthClientId !== updated.oauthClientId;
+  const repoChanged = settings.releaseRepo !== updated.releaseRepo;
+  // Do not destroy the previous configuration until the replacement passed validation.
+  await chrome.storage.local.set({[Core.SETTINGS_KEY]: updated});
+  if (sourceChanged || authChanged || fromImport) {
+    await chrome.storage.local.remove([Core.CACHE_KEY, LEGACY_CACHE_KEY, AUTH_PREFS_KEY]);
+    await clearToken();
+  }
+  if (repoChanged) await chrome.storage.local.remove(Core.UPDATE_KEY);
+  settings = updated;
+  if (sourceChanged || authChanged || fromImport) {
+    ui.cards.replaceChildren();
+    ui.empty.hidden = true;
+    ui.lastSync.textContent = '';
+    setControls(false);
+  }
+  if (repoChanged) updateMessage('');
+  if (!canConnect()) {
+    setNotice('Enter a Sheet URL or ID and an OAuth Client ID to connect.');
+    ui.syncState.textContent = 'Setup required';
+  } else if (sourceChanged || authChanged || fromImport) {
+    setNotice('Settings saved. Select Connect Google to confirm access to this Sheet.');
+    ui.syncState.textContent = 'Ready to connect';
+  } else {
+    setNotice('Settings saved.');
+  }
+  showSettings(false);
+}
+
+function downloadSettings() {
+  const backup = Core.createSettingsBackup(settings);
+  const blob = new Blob([`${JSON.stringify(backup, null, 2)}\n`], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'project-dashboard-settings.json';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setSettingsMessage('Settings downloaded. Store the file privately. Authentication tokens and project rows were not exported.');
+}
+
+async function importSettingsFile() {
+  const file = ui.importSettingsFile.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size > 64 * 1024) throw new Error('Settings backup must be smaller than 64 KB.');
+    const candidate = Core.parseSettingsBackup(await file.text());
+    if (!window.confirm('Replace local Project Dashboard settings from this backup?\nYou will need to connect Google again. The current cache and sign-in session will be cleared.')) return;
+    await applySettings(candidate, true);
+    setNotice('Settings imported. Connect Google to restore access to your selected Sheet.');
+  } catch (e) {
+    showSettings(true);
+    setSettingsMessage(e?.message || 'Could not import settings.', true);
+  } finally {
+    ui.importSettingsFile.value = '';
+  }
+}
+
 ui.settingsBtn.addEventListener('click', () => showSettings(ui.settingsPanel.hidden));
 ui.closeSettingsBtn.addEventListener('click', () => showSettings(false));
 ui.settingsForm.addEventListener('submit', async event => {
@@ -317,34 +419,15 @@ ui.settingsForm.addEventListener('submit', async event => {
       oauthClientId: ui.oauthClientInput.value,
       releaseRepo: ui.releaseRepoInput.value
     });
-    const sourceChanged = Core.sourceIdentity(settings) !== Core.sourceIdentity(updated);
-    const authChanged = settings.oauthClientId !== updated.oauthClientId;
-    const repoChanged = settings.releaseRepo !== updated.releaseRepo;
-    await chrome.storage.local.set({[Core.SETTINGS_KEY]:updated});
-    if (sourceChanged || authChanged) await chrome.storage.local.remove([Core.CACHE_KEY,LEGACY_CACHE_KEY]);
-    if (sourceChanged || authChanged) await clearToken();
-    if (authChanged) await chrome.storage.local.remove(AUTH_PREFS_KEY);
-    if (repoChanged) await chrome.storage.local.remove(Core.UPDATE_KEY);
-    settings = updated;
-    setSettingsMessage('Settings saved locally.');
-    if (sourceChanged || authChanged) {
-      ui.cards.replaceChildren(); ui.empty.hidden = true;
-      ui.lastSync.textContent = '';
-      setControls(false);
-    }
-    if (repoChanged) updateMessage('');
-    if (!canConnect()) {
-      setNotice('Enter a Sheet URL or ID and an OAuth Client ID to connect.');
-      ui.syncState.textContent = 'Setup required';
-    } else if (sourceChanged || authChanged) {
-      setNotice('Settings saved. Connect Google to verify access to the selected Sheet.');
-      ui.syncState.textContent = 'Ready to connect';
-    } else {
-      setNotice('Settings saved.');
-    }
-    showSettings(false);
+    await applySettings(updated);
   } catch (e) { setSettingsMessage(e.message || 'Could not save settings.', true); }
 });
+ui.exportSettingsBtn.addEventListener('click', () => {
+  try { downloadSettings(); }
+  catch (e) { setSettingsMessage(e?.message || 'Could not export settings.', true); }
+});
+ui.importSettingsBtn.addEventListener('click', () => ui.importSettingsFile.click());
+ui.importSettingsFile.addEventListener('change', importSettingsFile);
 ui.connectBtn.addEventListener('click', () => sync(true));
 ui.accountBtn.addEventListener('click', async () => {
   if (busy) return;
@@ -369,7 +452,8 @@ ui.updateBtn.addEventListener('click', () => checkUpdates(true));
       if (hadCache) ui.syncState.textContent = 'Cached snapshot';
       await sync(false);
     }
-    await checkUpdates(false);
+    const hadUpdateEvent = await showBrowserUpdateState();
+    if (!hadUpdateEvent) await checkUpdates(false);
   } catch (e) {
     ui.syncState.textContent = 'Setup error';
     setNotice(e?.message || 'Could not initialize Project Dashboard. Please check browser extension storage.', true);

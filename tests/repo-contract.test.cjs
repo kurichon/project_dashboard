@@ -7,7 +7,7 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 test('manifest branding and no embedded identity',()=>{
   const manifest=JSON.parse(read('extension/manifest.json'));
   assert.equal(manifest.name,'Project Dashboard');
-  assert.equal(manifest.version,'1.3.0');
+  assert.equal(manifest.version,'1.4.0');
   assert.ok(!manifest.key, 'Public manifest must not carry a personal key');
   const config=read('extension/config.js');
   assert.match(config,/oauthClientId:\s*''/);
@@ -23,4 +23,11 @@ test('updater accepts old name and new name without requiring reinstall',()=>{
   assert.match(source,/Project Pulse.*Project Dashboard/);
   assert.match(source,/Copy-Item.*oldConfig|Copy-Item\s+-LiteralPath\s+\$oldConfig/);
   assert.match(source,/Get-FileHash/);
+});
+test('store distribution files preserve legacy identity',()=>{
+ const m=JSON.parse(read('extension/manifest.json'));
+ assert.equal(m.background.service_worker,'background.js');
+ assert.equal(m.icons['128'],'icons/icon128.png');
+ assert.ok(fs.existsSync(path.join(root,'extension/icons/icon128.png')));
+ assert.match(read('extension/newtab.js'),/exportSettingsBtn/);
 });
