@@ -15,7 +15,7 @@ const example = {spreadsheetId:'1PROJECT_DASHBOARD_SYNTHETIC_SHEET_00000',projec
 test('GitHub-only manifest with stable settings identity',()=>{
   const m=JSON.parse(read('extension/manifest.json'));
   assert.equal(m.name,'Project Dashboard');
-  assert.equal(m.version,'1.4.0');
+  assert.equal(m.version,'1.4.1');
   assert.equal(m.manifest_version,3);
   assert.deepEqual(m.permissions,['identity','storage']);
   assert.ok(!m.background && !m.update_url && !m.key);

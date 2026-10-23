@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Project Dashboard",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A private new-tab dashboard for project progress, next actions, and recent activity.",
   "chrome_url_overrides": {
     "newtab": "newtab.html"

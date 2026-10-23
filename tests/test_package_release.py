@@ -15,7 +15,7 @@ class GitHubPackage(unittest.TestCase):
     def test_single_package_and_deterministic_hash(self):
         with tempfile.TemporaryDirectory() as folder:
             archive,checksums=module.build(Path(folder))
-            self.assertEqual(archive.name,'project-dashboard-v1.4.0.zip')
+            self.assertEqual(archive.name,'project-dashboard-v1.4.1.zip')
             self.assertEqual(checksums.name,'SHA256SUMS.txt')
             self.assertEqual(len(list(Path(folder).glob('*.zip'))),1)
             with ZipFile(archive) as z:

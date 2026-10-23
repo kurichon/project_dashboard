@@ -45,14 +45,15 @@ function updateMessage(text = '', url = '') {
 }
 function setBusy(isBusy) {
   busy = isBusy;
-  for (const button of [ui.connectBtn, ui.accountBtn, ui.refreshBtn, ui.saveSettingsBtn]) button.disabled = isBusy;
+  for (const button of [ui.connectBtn, ui.accountBtn, ui.refreshBtn, ui.saveSettingsBtn, ui.importSettingsBtn]) button.disabled = isBusy;
   if (isBusy) ui.syncState.textContent = 'Syncing…';
 }
 function canConnect() { return Boolean(settings.spreadsheetId && settings.oauthClientId); }
 function setControls(connected) {
   const ready = canConnect();
   ui.connectBtn.hidden = !ready || connected;
-  ui.accountBtn.hidden = !ready || !connected;
+  // Recovery must remain available even after a rejected or cancelled sign-in.
+  ui.accountBtn.hidden = !ready;
   ui.refreshBtn.hidden = !ready;
 }
 function showSettings(open) {
@@ -82,6 +83,7 @@ async function changeAccount() {
     chrome.storage.local.remove([AUTH_PREFS_KEY, Core.CACHE_KEY, LEGACY_CACHE_KEY])
   ]);
   ui.cards.replaceChildren();
+  ui.empty.hidden = true;
   ui.lastSync.textContent = '';
   ui.syncState.textContent = 'Not connected';
 }
@@ -103,7 +105,9 @@ function parseOAuthResponse(finalUrl, expectedState) {
   const state = params.get('state') || url.searchParams.get('state');
   if (!state || state !== expectedState) throw new Error('OAuth state verification failed.');
   const error = params.get('error') || url.searchParams.get('error');
-  if (error) throw new Error(`Google authorization failed: ${error}.`);
+  if (error) throw new Error(error === 'access_denied'
+    ? 'Google denied authorization for that account. Select Change account to choose an authorized Google account.'
+    : `Google authorization failed: ${error}.`);
   const token = params.get('access_token') || url.searchParams.get('access_token');
   if (!token) throw new Error('Google did not return an access token.');
   const expiresIn = Number(params.get('expires_in') || url.searchParams.get('expires_in') || 3600);
@@ -111,8 +115,24 @@ function parseOAuthResponse(finalUrl, expectedState) {
   const authuser = params.get('authuser') || url.searchParams.get('authuser');
   return {token, expiresIn, authuser};
 }
+function accountSelectionRequired(message) {
+  const error = new Error(message);
+  error.code = 'ACCOUNT_SELECTION_REQUIRED';
+  return error;
+}
 async function launchGoogleOAuth(interactive) {
   if (!canConnect()) throw new Error('Configure your Sheet and Google OAuth Client ID in Settings first.');
+  let selectedAccount = null;
+  if (!interactive) {
+    const data = await chrome.storage.local.get(AUTH_PREFS_KEY);
+    const prefs = data[AUTH_PREFS_KEY];
+    // A fresh install or legacy automatic session must never guess account 0.
+    // Without a previously chosen account slot, renewal requires a user click.
+    if (!prefs?.selectedByUser || !/^\d+$/.test(String(prefs.authuser ?? ''))) {
+      throw accountSelectionRequired('Select Connect Google or Change account to choose the account that can read your Sheet.');
+    }
+    selectedAccount = String(prefs.authuser);
+  }
   const state = randomState();
   const params = new URLSearchParams({
     client_id: settings.oauthClientId,
@@ -122,22 +142,40 @@ async function launchGoogleOAuth(interactive) {
     state,
     prompt: interactive ? 'select_account consent' : 'none'
   });
-  if (!interactive) {
-    const data = await chrome.storage.local.get(AUTH_PREFS_KEY);
-    const authuser = data[AUTH_PREFS_KEY]?.authuser;
-    if (authuser !== undefined && authuser !== null && authuser !== '') params.set('authuser', String(authuser));
+  // An explicit chooser never carries a hint for the account being replaced.
+  if (!interactive) params.set('authuser', selectedAccount);
+  let finalUrl;
+  try {
+    finalUrl = await chrome.identity.launchWebAuthFlow({
+      url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+      interactive
+    });
+  } catch (_) {
+    if (!interactive) {
+      await chrome.storage.local.remove(AUTH_PREFS_KEY);
+      throw accountSelectionRequired('Google could not renew the selected account. Select Connect Google or Change account to sign in.');
+    }
+    throw new Error('Google sign-in did not complete. Select Connect Google or Change account to try again.');
   }
-  const finalUrl = await chrome.identity.launchWebAuthFlow({
-    url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
-    interactive
-  });
   const result = parseOAuthResponse(finalUrl, state);
   const expiresAt = Date.now() + Math.max(60, result.expiresIn) * 1000;
   await chrome.storage.session.set({[AUTH_SESSION_KEY]: {token: result.token, expiresAt}});
-  if (result.authuser !== null) await chrome.storage.local.set({[AUTH_PREFS_KEY]: {authuser: result.authuser}});
+  if (/^\d+$/.test(String(result.authuser ?? ''))) {
+    await chrome.storage.local.set({[AUTH_PREFS_KEY]: {authuser: result.authuser, selectedByUser: true}});
+  } else {
+    await chrome.storage.local.remove(AUTH_PREFS_KEY);
+  }
   return result.token;
 }
-async function getAccessToken(interactive) { return await storedToken() || await launchGoogleOAuth(interactive); }
+async function getAccessToken(interactive) {
+  if (interactive) {
+    // Clicking Connect/Change means choose again, not reuse a cached token.
+    // Remove prior-account rows before a different account can be selected.
+    await changeAccount();
+    return launchGoogleOAuth(true);
+  }
+  return await storedToken() || await launchGoogleOAuth(false);
+}
 
 async function fetchRange(token, tab, columns, maxRows) {
   const range = `${Core.quoteTab(tab)}!A1:${columns}${maxRows}`;
@@ -147,7 +185,9 @@ async function fetchRange(token, tab, columns, maxRows) {
     await clearToken(); throw new Error('Google session expired. Select Connect Google to sign in.');
   }
   if (response.status === 403) {
-    throw new Error('Google denied read access. Check your selected account, the Sheet sharing settings, and Sheets API access.');
+    const error = new Error('Google denied read access for this account. Select Change account to choose the correct account. If it is already correct, check Sheet sharing and Sheets API access.');
+    error.code = 'ACCOUNT_ACCESS_DENIED';
+    throw error;
   }
   if (!response.ok) {
     let detail = '';
@@ -230,6 +270,7 @@ async function sync(interactive = false) {
         historyRows = await fetchRange(token, settings.historyTab, 'B', 5000);
         Core.headerCheck(historyRows, ['timestamp', 'project']);
       } catch (e) {
+        if (e.code === 'ACCOUNT_ACCESS_DENIED') throw e;
         historyError = `History unavailable: ${e.message}`;
       }
     }
@@ -244,10 +285,11 @@ async function sync(interactive = false) {
     if (rejected) warning += `${warning ? ' ' : ''}${rejected} invalid History row${rejected===1?'':'s'} excluded from update counts.`;
     setNotice(warning);
   } catch (err) {
+    if (err?.code === 'ACCOUNT_ACCESS_DENIED') await changeAccount();
     const hadCache = await loadCache();
     if (!hadCache) { ui.cards.replaceChildren(); ui.empty.hidden = true; ui.syncState.textContent = 'Not connected'; }
     setControls(false);
-    setNotice(`${err?.message || 'Could not read your Google Sheet.'}${hadCache ? ' Showing the last saved snapshot.' : ''}`, true);
+    setNotice(`${err?.message || 'Could not read your Google Sheet.'}${hadCache ? ' Showing the last saved snapshot.' : ''}`, err?.code !== 'ACCOUNT_SELECTION_REQUIRED');
   } finally { setBusy(false); }
 }
 
@@ -359,6 +401,7 @@ function downloadSettings() {
 }
 
 async function importSettingsFile() {
+  if (busy) { ui.importSettingsFile.value = ''; return; }
   const file = ui.importSettingsFile.files?.[0];
   if (!file) return;
   try {
@@ -398,12 +441,7 @@ ui.exportSettingsBtn.addEventListener('click', () => {
 ui.importSettingsBtn.addEventListener('click', () => ui.importSettingsFile.click());
 ui.importSettingsFile.addEventListener('change', importSettingsFile);
 ui.connectBtn.addEventListener('click', () => sync(true));
-ui.accountBtn.addEventListener('click', async () => {
-  if (busy) return;
-  await changeAccount();
-  setControls(false);
-  await sync(true);
-});
+ui.accountBtn.addEventListener('click', () => sync(true));
 ui.refreshBtn.addEventListener('click', () => sync(false));
 ui.updateBtn.addEventListener('click', () => checkUpdates(true));
 

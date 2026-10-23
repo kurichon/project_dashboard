@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.1 — Account selection repair candidate
+
+- Fix Connect Google reusing a rejected, unexpired account token instead of opening the chooser.
+- Keep Change account available after sign-in failures and cancellations.
+- Clear rejected sessions, account hints and old-account caches while preserving configuration.
+- Require an explicit initial account choice; only renew a previously selected account silently.
+- Add failed-account, chooser, cancellation, retry and privacy regression tests, plus rendered Chromium UI checks with simulated authorization.
+- Preserve the read-only scope, existing OAuth client/redirect and GitHub-only update workflow. Live Google/Brave validation remains pending.
+
 ## 1.4.0 — GitHub-only development candidate (not a stable release)
 
 - Keep Google Sheets, existing UI and migration behavior from Project Pulse; preserve the `projectPulse*` settings/cache keys.

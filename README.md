@@ -4,7 +4,7 @@
 
 Project Dashboard reads a **user-selected private Google Sheet**. The open-source repository and release ZIP contain no personal spreadsheets, OAuth IDs, tokens, or projects. Licensed under MIT.
 
-**Distribution:** [GitHub Releases](https://github.com/kurichon/project_dashboard/releases), without the Chrome Web Store. The latest v1.4 source is a candidate until verified in a real Brave installation.
+**Distribution:** [GitHub Releases](https://github.com/kurichon/project_dashboard/releases), without the Chrome Web Store. The latest v1.4.1 source is a candidate until verified in a real Brave installation.
 
 ## Features
 
@@ -23,6 +23,19 @@ Project Dashboard reads a **user-selected private Google Sheet**. The open-sourc
 4. Click **Save settings**, then **Connect Google**. The Sheets API must be enabled and the selected Google account must have access to the Sheet.
 
 Required Projects headers: `Project | Status | Next | Updated`. Optional History headers: `Timestamp | Project`. A Google Drive folder picker is out of scope; only a selected Sheet is read.
+
+## Google account selection
+
+**Connect Google** and **Change account** always request a fresh Google account chooser;
+neither button reuses a previously cached token. **Change account** remains available
+after denied or cancelled sign-ins. A first connection waits for your click rather
+than silently trying the browser's default Google account. Rejected access clears
+only the session, account hint and cached rows, not your Sheet/OAuth configuration.
+
+Silent renewal is allowed only after an explicit selection with a returned Google
+account slot; otherwise click Connect Google again. No additional OAuth scopes are
+requested. The v1.4.1 fix is regression-tested with simulated Google responses;
+real Google/Brave account selection still needs confirmation on the user's device.
 
 ## Update without uninstalling
 

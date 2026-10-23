@@ -16,7 +16,7 @@ try {
     $hash=(Get-FileHash $packageZip -Algorithm SHA256).Hash
     & (Join-Path $repo 'tools/upgrade-local.ps1') -InstallDir $install -Package $packageZip -ExpectedSha256 $hash
     $new=Get-Content (Join-Path $install 'manifest.json') -Raw | ConvertFrom-Json
-    if ($new.name -ne 'Project Dashboard' -or $new.key -ne 'LEGACY_PUBLIC_KEY' -or $new.version -ne '1.4.0') { throw 'Migration did not preserve identity or change version/name.' }
+    if ($new.name -ne 'Project Dashboard' -or $new.key -ne 'LEGACY_PUBLIC_KEY' -or $new.version -ne '1.4.1') { throw 'Migration did not preserve identity or change version/name.' }
     if ((Get-Content (Join-Path $install 'config.js') -Raw) -notmatch 'LOCAL_EXAMPLE_ID') { throw 'Legacy local configuration was lost.' }
     if ((Get-Content (Join-Path $install 'newtab.js') -Raw) -eq 'OLD') { throw 'Source files did not upgrade.' }
     if (-not (Test-Path (Join-Path $install 'icons/icon128.png'))) { throw 'Recursive icon migration failed.' }
@@ -28,7 +28,7 @@ try {
     try { & (Join-Path $repo 'tools/upgrade-local.ps1') -InstallDir $install -Package $packageZip -ExpectedSha256 ('0' * 64) | Out-Null } catch { $failed=$true }
     if (-not $failed) { throw 'Wrong checksum was accepted.' }
     $still=Get-Content (Join-Path $install 'manifest.json') -Raw | ConvertFrom-Json
-    if ($still.version -ne '1.4.0') { throw 'Checksum failure changed installed version.' }
+    if ($still.version -ne '1.4.1') { throw 'Checksum failure changed installed version.' }
     Write-Host 'PASS updater: legacy rebrand, ID/config unchanged, backup, checksum failure safety'
 } finally {
     if (Test-Path $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force }
