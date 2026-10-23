@@ -158,3 +158,10 @@ footer {
 .update-notice a { color: var(--text); font-weight: 650; white-space: nowrap; }
 .notice.info { color: var(--soft); }
 @media (max-width: 760px) { .fields { grid-template-columns: 1fr; } .settings-head { flex-direction: column; } .settings-actions, .update-notice { align-items: stretch; flex-direction: column; } }
+
+/* Settings portability and browser-managed update feedback. */
+.settings-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.settings-backup-help { margin: 9px 0 0; color: var(--muted); line-height: 1.5; font-size: 11px; }
+.settings-message { margin: 8px 0 0; min-height: 16px; }
+#versionInfo { white-space: nowrap; }
+@media (max-width: 760px) { footer { flex-wrap: wrap; } }

@@ -18,11 +18,14 @@ const ui = {
   redirectUrl: $('#redirectUrl'), settingsMessage: $('#settingsMessage'), saveSettingsBtn: $('#saveSettingsBtn'),
   connectBtn: $('#connectBtn'), accountBtn: $('#accountBtn'), refreshBtn: $('#refreshBtn'),
   syncState: $('#syncState'), lastSync: $('#lastSync'), updateBtn: $('#updateBtn'),
-  updateNotice: $('#updateNotice'), updateText: $('#updateText'), updateLink: $('#updateLink')
+  updateNotice: $('#updateNotice'), updateText: $('#updateText'), updateLink: $('#updateLink'),
+  exportSettingsBtn: $('#exportSettingsBtn'), importSettingsBtn: $('#importSettingsBtn'),
+  importSettingsFile: $('#importSettingsFile'), versionInfo: $('#versionInfo')
 };
 let settings = Core.normalizeSettings(Core.DEFAULTS);
 let busy = false;
 let checkingUpdates = false;
+ui.versionInfo.textContent = `v${APP_VERSION}`;
 
 function setNotice(text = '', error = false) {
   ui.notice.textContent = text;
@@ -42,14 +45,15 @@ function updateMessage(text = '', url = '') {
 }
 function setBusy(isBusy) {
   busy = isBusy;
-  for (const button of [ui.connectBtn, ui.accountBtn, ui.refreshBtn, ui.saveSettingsBtn]) button.disabled = isBusy;
+  for (const button of [ui.connectBtn, ui.accountBtn, ui.refreshBtn, ui.saveSettingsBtn, ui.importSettingsBtn]) button.disabled = isBusy;
   if (isBusy) ui.syncState.textContent = 'Syncing…';
 }
 function canConnect() { return Boolean(settings.spreadsheetId && settings.oauthClientId); }
 function setControls(connected) {
   const ready = canConnect();
   ui.connectBtn.hidden = !ready || connected;
-  ui.accountBtn.hidden = !ready || !connected;
+  // Recovery must remain available even after a rejected or cancelled sign-in.
+  ui.accountBtn.hidden = !ready;
   ui.refreshBtn.hidden = !ready;
 }
 function showSettings(open) {
@@ -79,6 +83,7 @@ async function changeAccount() {
     chrome.storage.local.remove([AUTH_PREFS_KEY, Core.CACHE_KEY, LEGACY_CACHE_KEY])
   ]);
   ui.cards.replaceChildren();
+  ui.empty.hidden = true;
   ui.lastSync.textContent = '';
   ui.syncState.textContent = 'Not connected';
 }
@@ -100,7 +105,9 @@ function parseOAuthResponse(finalUrl, expectedState) {
   const state = params.get('state') || url.searchParams.get('state');
   if (!state || state !== expectedState) throw new Error('OAuth state verification failed.');
   const error = params.get('error') || url.searchParams.get('error');
-  if (error) throw new Error(`Google authorization failed: ${error}.`);
+  if (error) throw new Error(error === 'access_denied'
+    ? 'Google denied authorization for that account. Select Change account to choose an authorized Google account.'
+    : `Google authorization failed: ${error}.`);
   const token = params.get('access_token') || url.searchParams.get('access_token');
   if (!token) throw new Error('Google did not return an access token.');
   const expiresIn = Number(params.get('expires_in') || url.searchParams.get('expires_in') || 3600);
@@ -108,8 +115,24 @@ function parseOAuthResponse(finalUrl, expectedState) {
   const authuser = params.get('authuser') || url.searchParams.get('authuser');
   return {token, expiresIn, authuser};
 }
+function accountSelectionRequired(message) {
+  const error = new Error(message);
+  error.code = 'ACCOUNT_SELECTION_REQUIRED';
+  return error;
+}
 async function launchGoogleOAuth(interactive) {
   if (!canConnect()) throw new Error('Configure your Sheet and Google OAuth Client ID in Settings first.');
+  let selectedAccount = null;
+  if (!interactive) {
+    const data = await chrome.storage.local.get(AUTH_PREFS_KEY);
+    const prefs = data[AUTH_PREFS_KEY];
+    // A fresh install or legacy automatic session must never guess account 0.
+    // Without a previously chosen account slot, renewal requires a user click.
+    if (!prefs?.selectedByUser || !/^\d+$/.test(String(prefs.authuser ?? ''))) {
+      throw accountSelectionRequired('Select Connect Google or Change account to choose the account that can read your Sheet.');
+    }
+    selectedAccount = String(prefs.authuser);
+  }
   const state = randomState();
   const params = new URLSearchParams({
     client_id: settings.oauthClientId,
@@ -119,22 +142,40 @@ async function launchGoogleOAuth(interactive) {
     state,
     prompt: interactive ? 'select_account consent' : 'none'
   });
-  if (!interactive) {
-    const data = await chrome.storage.local.get(AUTH_PREFS_KEY);
-    const authuser = data[AUTH_PREFS_KEY]?.authuser;
-    if (authuser !== undefined && authuser !== null && authuser !== '') params.set('authuser', String(authuser));
+  // An explicit chooser never carries a hint for the account being replaced.
+  if (!interactive) params.set('authuser', selectedAccount);
+  let finalUrl;
+  try {
+    finalUrl = await chrome.identity.launchWebAuthFlow({
+      url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+      interactive
+    });
+  } catch (_) {
+    if (!interactive) {
+      await chrome.storage.local.remove(AUTH_PREFS_KEY);
+      throw accountSelectionRequired('Google could not renew the selected account. Select Connect Google or Change account to sign in.');
+    }
+    throw new Error('Google sign-in did not complete. Select Connect Google or Change account to try again.');
   }
-  const finalUrl = await chrome.identity.launchWebAuthFlow({
-    url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
-    interactive
-  });
   const result = parseOAuthResponse(finalUrl, state);
   const expiresAt = Date.now() + Math.max(60, result.expiresIn) * 1000;
   await chrome.storage.session.set({[AUTH_SESSION_KEY]: {token: result.token, expiresAt}});
-  if (result.authuser !== null) await chrome.storage.local.set({[AUTH_PREFS_KEY]: {authuser: result.authuser}});
+  if (/^\d+$/.test(String(result.authuser ?? ''))) {
+    await chrome.storage.local.set({[AUTH_PREFS_KEY]: {authuser: result.authuser, selectedByUser: true}});
+  } else {
+    await chrome.storage.local.remove(AUTH_PREFS_KEY);
+  }
   return result.token;
 }
-async function getAccessToken(interactive) { return await storedToken() || await launchGoogleOAuth(interactive); }
+async function getAccessToken(interactive) {
+  if (interactive) {
+    // Clicking Connect/Change means choose again, not reuse a cached token.
+    // Remove prior-account rows before a different account can be selected.
+    await changeAccount();
+    return launchGoogleOAuth(true);
+  }
+  return await storedToken() || await launchGoogleOAuth(false);
+}
 
 async function fetchRange(token, tab, columns, maxRows) {
   const range = `${Core.quoteTab(tab)}!A1:${columns}${maxRows}`;
@@ -144,7 +185,9 @@ async function fetchRange(token, tab, columns, maxRows) {
     await clearToken(); throw new Error('Google session expired. Select Connect Google to sign in.');
   }
   if (response.status === 403) {
-    throw new Error('Google denied read access. Check your selected account, the Sheet sharing settings, and Sheets API access.');
+    const error = new Error('Google denied read access for this account. Select Change account to choose the correct account. If it is already correct, check Sheet sharing and Sheets API access.');
+    error.code = 'ACCOUNT_ACCESS_DENIED';
+    throw error;
   }
   if (!response.ok) {
     let detail = '';
@@ -227,6 +270,7 @@ async function sync(interactive = false) {
         historyRows = await fetchRange(token, settings.historyTab, 'B', 5000);
         Core.headerCheck(historyRows, ['timestamp', 'project']);
       } catch (e) {
+        if (e.code === 'ACCOUNT_ACCESS_DENIED') throw e;
         historyError = `History unavailable: ${e.message}`;
       }
     }
@@ -241,25 +285,26 @@ async function sync(interactive = false) {
     if (rejected) warning += `${warning ? ' ' : ''}${rejected} invalid History row${rejected===1?'':'s'} excluded from update counts.`;
     setNotice(warning);
   } catch (err) {
+    if (err?.code === 'ACCOUNT_ACCESS_DENIED') await changeAccount();
     const hadCache = await loadCache();
     if (!hadCache) { ui.cards.replaceChildren(); ui.empty.hidden = true; ui.syncState.textContent = 'Not connected'; }
     setControls(false);
-    setNotice(`${err?.message || 'Could not read your Google Sheet.'}${hadCache ? ' Showing the last saved snapshot.' : ''}`, true);
+    setNotice(`${err?.message || 'Could not read your Google Sheet.'}${hadCache ? ' Showing the last saved snapshot.' : ''}`, err?.code !== 'ACCOUNT_SELECTION_REQUIRED');
   } finally { setBusy(false); }
 }
 
 async function checkUpdates(manual = false) {
   if (checkingUpdates) return;
   if (!settings.releaseRepo) {
-    if (manual) { updateMessage('Set a public GitHub release repository in Settings first.'); showSettings(true); }
+    if (manual) updateMessage('Set a public GitHub release repository in Settings to check for updates.');
     return;
   }
   const repo = settings.releaseRepo;
-  const local = await chrome.storage.local.get(Core.UPDATE_KEY);
-  const previous = local[Core.UPDATE_KEY];
-  if (!manual && previous?.repo === repo && Date.now()-previous.checkedAt < UPDATE_INTERVAL_MS) {
+  const stored = await chrome.storage.local.get(Core.UPDATE_KEY);
+  const previous = stored[Core.UPDATE_KEY];
+  if (!manual && previous?.repo === repo && Date.now() - previous.checkedAt < UPDATE_INTERVAL_MS) {
     if (previous.tag && Core.compareVersions(previous.tag, APP_VERSION) > 0) {
-      updateMessage(`Project Dashboard ${previous.tag} is available (installed: ${APP_VERSION}).`, Core.releasePageUrl(repo));
+      updateMessage(`Project Dashboard ${previous.tag} is available (installed: v${APP_VERSION}). Get the release ZIP and run its updater; do not uninstall the extension.`, Core.releasePageUrl(repo));
     }
     return;
   }
@@ -268,20 +313,26 @@ async function checkUpdates(manual = false) {
   ui.updateBtn.textContent = 'Checking…';
   try {
     const response = await fetch(Core.releaseApiUrl(repo), {cache: 'no-store', headers: {Accept: 'application/vnd.github+json'}});
-    if (!response.ok) throw new Error(response.status === 404 ? 'No published release found, or repository is private.' : `GitHub release check failed (HTTP ${response.status}).`);
+    if (response.status === 404) {
+      if (manual) updateMessage('There are no published stable GitHub releases yet. Your installed extension is unchanged.');
+      return;
+    }
+    if (!response.ok) throw new Error(`GitHub release check failed (HTTP ${response.status}).`);
     const data = await response.json();
     if (repo !== settings.releaseRepo) return;
-    if (data.draft || data.prerelease || !data.tag_name) throw new Error('No stable release version is available.');
+    if (data.draft || data.prerelease || !data.tag_name) throw new Error('No stable GitHub release is available.');
     const diff = Core.compareVersions(data.tag_name, APP_VERSION);
-    if (diff === null) throw new Error('Latest release tag is not in v1.2.3 version format.');
-    await chrome.storage.local.set({[Core.UPDATE_KEY]: {repo, checkedAt:Date.now(), tag:data.tag_name}});
+    if (diff === null) throw new Error('The latest GitHub release tag is not in v1.2.3 format.');
+    await chrome.storage.local.set({[Core.UPDATE_KEY]: {repo, checkedAt: Date.now(), tag: data.tag_name}});
     if (diff > 0) {
-      updateMessage(`Project Dashboard ${data.tag_name} is available (installed: ${APP_VERSION}).`, Core.releasePageUrl(repo));
+      updateMessage(`Project Dashboard ${data.tag_name} is available (installed: v${APP_VERSION}). Download the release ZIP and use the included updater to preserve your extension and settings.`, Core.releasePageUrl(repo));
     } else if (manual) {
       updateMessage(`You're up to date (v${APP_VERSION}).`);
-    } else { updateMessage(''); }
+    } else {
+      updateMessage('');
+    }
   } catch (e) {
-    if (manual) updateMessage(e?.message || 'Could not check releases.');
+    if (manual) updateMessage(e?.message || 'Could not check GitHub releases. The installed version was not changed.');
   } finally {
     checkingUpdates = false;
     ui.updateBtn.disabled = false;
@@ -304,6 +355,69 @@ async function loadSettings() {
   return migrated;
 }
 
+async function applySettings(updated, fromImport = false) {
+  const sourceChanged = Core.sourceIdentity(settings) !== Core.sourceIdentity(updated);
+  const authChanged = settings.oauthClientId !== updated.oauthClientId;
+  const repoChanged = settings.releaseRepo !== updated.releaseRepo;
+  // Do not destroy the previous configuration until the replacement passed validation.
+  await chrome.storage.local.set({[Core.SETTINGS_KEY]: updated});
+  if (sourceChanged || authChanged || fromImport) {
+    await chrome.storage.local.remove([Core.CACHE_KEY, LEGACY_CACHE_KEY, AUTH_PREFS_KEY]);
+    await clearToken();
+  }
+  if (repoChanged) await chrome.storage.local.remove(Core.UPDATE_KEY);
+  settings = updated;
+  if (sourceChanged || authChanged || fromImport) {
+    ui.cards.replaceChildren();
+    ui.empty.hidden = true;
+    ui.lastSync.textContent = '';
+    setControls(false);
+  }
+  if (repoChanged) updateMessage('');
+  if (!canConnect()) {
+    setNotice('Enter a Sheet URL or ID and an OAuth Client ID to connect.');
+    ui.syncState.textContent = 'Setup required';
+  } else if (sourceChanged || authChanged || fromImport) {
+    setNotice('Settings saved. Select Connect Google to confirm access to this Sheet.');
+    ui.syncState.textContent = 'Ready to connect';
+  } else {
+    setNotice('Settings saved.');
+  }
+  showSettings(false);
+}
+
+function downloadSettings() {
+  const backup = Core.createSettingsBackup(settings);
+  const blob = new Blob([`${JSON.stringify(backup, null, 2)}\n`], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'project-dashboard-settings.json';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setSettingsMessage('Settings downloaded. Store the file privately. Authentication tokens and project rows were not exported.');
+}
+
+async function importSettingsFile() {
+  if (busy) { ui.importSettingsFile.value = ''; return; }
+  const file = ui.importSettingsFile.files?.[0];
+  if (!file) return;
+  try {
+    if (file.size > 64 * 1024) throw new Error('Settings backup must be smaller than 64 KB.');
+    const candidate = Core.parseSettingsBackup(await file.text());
+    if (!window.confirm('Replace local Project Dashboard settings from this backup?\nYou will need to connect Google again. The current cache and sign-in session will be cleared.')) return;
+    await applySettings(candidate, true);
+    setNotice('Settings imported. Connect Google to restore access to your selected Sheet.');
+  } catch (e) {
+    showSettings(true);
+    setSettingsMessage(e?.message || 'Could not import settings.', true);
+  } finally {
+    ui.importSettingsFile.value = '';
+  }
+}
+
 ui.settingsBtn.addEventListener('click', () => showSettings(ui.settingsPanel.hidden));
 ui.closeSettingsBtn.addEventListener('click', () => showSettings(false));
 ui.settingsForm.addEventListener('submit', async event => {
@@ -317,41 +431,17 @@ ui.settingsForm.addEventListener('submit', async event => {
       oauthClientId: ui.oauthClientInput.value,
       releaseRepo: ui.releaseRepoInput.value
     });
-    const sourceChanged = Core.sourceIdentity(settings) !== Core.sourceIdentity(updated);
-    const authChanged = settings.oauthClientId !== updated.oauthClientId;
-    const repoChanged = settings.releaseRepo !== updated.releaseRepo;
-    await chrome.storage.local.set({[Core.SETTINGS_KEY]:updated});
-    if (sourceChanged || authChanged) await chrome.storage.local.remove([Core.CACHE_KEY,LEGACY_CACHE_KEY]);
-    if (sourceChanged || authChanged) await clearToken();
-    if (authChanged) await chrome.storage.local.remove(AUTH_PREFS_KEY);
-    if (repoChanged) await chrome.storage.local.remove(Core.UPDATE_KEY);
-    settings = updated;
-    setSettingsMessage('Settings saved locally.');
-    if (sourceChanged || authChanged) {
-      ui.cards.replaceChildren(); ui.empty.hidden = true;
-      ui.lastSync.textContent = '';
-      setControls(false);
-    }
-    if (repoChanged) updateMessage('');
-    if (!canConnect()) {
-      setNotice('Enter a Sheet URL or ID and an OAuth Client ID to connect.');
-      ui.syncState.textContent = 'Setup required';
-    } else if (sourceChanged || authChanged) {
-      setNotice('Settings saved. Connect Google to verify access to the selected Sheet.');
-      ui.syncState.textContent = 'Ready to connect';
-    } else {
-      setNotice('Settings saved.');
-    }
-    showSettings(false);
+    await applySettings(updated);
   } catch (e) { setSettingsMessage(e.message || 'Could not save settings.', true); }
 });
-ui.connectBtn.addEventListener('click', () => sync(true));
-ui.accountBtn.addEventListener('click', async () => {
-  if (busy) return;
-  await changeAccount();
-  setControls(false);
-  await sync(true);
+ui.exportSettingsBtn.addEventListener('click', () => {
+  try { downloadSettings(); }
+  catch (e) { setSettingsMessage(e?.message || 'Could not export settings.', true); }
 });
+ui.importSettingsBtn.addEventListener('click', () => ui.importSettingsFile.click());
+ui.importSettingsFile.addEventListener('change', importSettingsFile);
+ui.connectBtn.addEventListener('click', () => sync(true));
+ui.accountBtn.addEventListener('click', () => sync(true));
 ui.refreshBtn.addEventListener('click', () => sync(false));
 ui.updateBtn.addEventListener('click', () => checkUpdates(true));
 

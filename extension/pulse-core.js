@@ -5,6 +5,8 @@
   const SETTINGS_KEY = 'projectPulseSettingsV3';
   const CACHE_KEY = 'projectPulseCacheV2';
   const UPDATE_KEY = 'projectPulseReleaseCheckV1';
+  const SETTINGS_BACKUP_FORMAT = 'project-dashboard-settings';
+  const SETTINGS_BACKUP_VERSION = 1;
   const DEFAULTS = Object.freeze({
     spreadsheetId: '',
     projectsTab: 'Projects',
@@ -77,6 +79,33 @@
     const releaseRepo = parseReleaseRepo(input.releaseRepo);
     if (input.releaseRepo && !releaseRepo) throw new Error('Use a GitHub repository like owner/repo or https://github.com/owner/repo.');
     return { ...input, spreadsheetId, releaseRepo };
+  }
+
+  // Explicit, minimal export format. Never export session tokens, account hints or cached Sheet rows.
+  function createSettingsBackup(currentSettings) {
+    return {format: SETTINGS_BACKUP_FORMAT, version: SETTINGS_BACKUP_VERSION, settings: validateSettings(currentSettings)};
+  }
+
+  function parseSettingsBackup(raw) {
+    let backup;
+    try { backup = typeof raw === 'string' ? JSON.parse(raw) : raw; }
+    catch (_) { throw new Error('The selected file is not valid JSON.'); }
+    if (!backup || typeof backup !== 'object' || Array.isArray(backup) ||
+        backup.format !== SETTINGS_BACKUP_FORMAT || backup.version !== SETTINGS_BACKUP_VERSION ||
+        !backup.settings || typeof backup.settings !== 'object' || Array.isArray(backup.settings)) {
+      throw new Error('This is not a supported Project Dashboard settings backup.');
+    }
+    const allowedRoot = new Set(['format','version','settings']);
+    const allowedSettings = new Set(['spreadsheetId','projectsTab','historyTab','oauthClientId','releaseRepo']);
+    if (Object.keys(backup).some(key => !allowedRoot.has(key)) ||
+        Object.keys(backup.settings).some(key => !allowedSettings.has(key))) {
+      throw new Error('Settings backup contains unexpected fields.');
+    }
+    if (Object.keys(backup.settings).length !== allowedSettings.size ||
+        [...allowedSettings].some(key => !Object.prototype.hasOwnProperty.call(backup.settings,key))) {
+      throw new Error('Settings backup is incomplete.');
+    }
+    return validateSettings(backup.settings);
   }
 
   function sourceIdentity(settings) {
@@ -162,6 +191,7 @@
 
   root.PulseCore = Object.freeze({
     SETTINGS_KEY, CACHE_KEY, UPDATE_KEY, DEFAULTS,
+    createSettingsBackup, parseSettingsBackup,
     parseSpreadsheetId, parseReleaseRepo, validTab, quoteTab, normalizeSettings, validateSettings,
     sourceIdentity, rowsToObjects, headerCheck, parseSheetDate, historyCounts, compareVersions,
     releaseApiUrl, releasePageUrl

@@ -58,19 +58,25 @@
           <label class="field wide">
             <span>Update repository (optional)</span>
             <input id="releaseRepoInput" type="text" placeholder="kurichon/project_dashboard" spellcheck="false" />
-            <small>Public GitHub release metadata only. Leave blank until a release repository exists. No project data is sent to GitHub.</small>
+            <small>Checks stable GitHub releases only. Download and run the release updater to apply an update; no project data is sent to GitHub.</small>
           </label>
         </div>
         <div class="settings-actions">
-          <span id="settingsMessage" class="settings-message" role="status"></span>
+          <div class="settings-tools">
+            <button id="exportSettingsBtn" class="button secondary" type="button">Export settings</button>
+            <button id="importSettingsBtn" class="button secondary" type="button">Import settings</button>
+            <input id="importSettingsFile" type="file" accept=".json,application/json" hidden />
+          </div>
           <button id="saveSettingsBtn" class="button" type="submit">Save settings</button>
         </div>
+        <p class="settings-backup-help">Optional recovery backup for changing browsers or extension identities. The exported file includes your private Sheet ID and OAuth client ID, but never tokens or cached project data. Store it privately.</p>
+        <p id="settingsMessage" class="settings-message" role="status"></p>
       </form>
     </section>
 
     <section id="updateNotice" class="notice update-notice" hidden aria-live="polite">
       <span id="updateText"></span>
-      <a id="updateLink" hidden target="_blank" rel="noopener noreferrer">View release</a>
+      <a id="updateLink" hidden target="_blank" rel="noopener noreferrer">Get release</a>
     </section>
     <section id="notice" class="notice" hidden role="status"></section>
     <section id="cards" class="cards" aria-live="polite"></section>
@@ -81,6 +87,7 @@
     <footer>
       <span>Your private Sheet → this browser only</span>
       <span id="lastSync"></span>
+      <span id="versionInfo" aria-label="Installed application version"></span>
     </footer>
   </main>
   <script src="config.js"></script>
