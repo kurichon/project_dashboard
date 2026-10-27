@@ -113,6 +113,7 @@
       text(head,'div','age',age(project.updated));
       card.append(head);
       if (project.error) text(card,'div','source-warning',project.stale ? 'Cached · Source unavailable' : 'Source unavailable');
+      if (project.snapshotKind === 'snapshot') text(card,'div','snapshot-note','Migrated snapshot · Writer not redirected');
       makeLine(card,'Status',project.status || (project.error ? 'Unavailable' : 'Not reported'));
       makeLine(card,'Next',project.next || 'Not reported');
       if (project.phase) makeLine(card,'Phase',label(project.phase));
