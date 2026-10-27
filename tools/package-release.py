@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXT = ROOT / 'extension'
 EXTENSION_FILES = (
     'manifest.json','config.js','newtab.css','newtab.html','newtab.js','pulse-core.js',
+    'pdrc-core.js','pdrc-view.js',
     'icons/icon16.png','icons/icon48.png','icons/icon128.png',
 )
 EXTRAS = (
