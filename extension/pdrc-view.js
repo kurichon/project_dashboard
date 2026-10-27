@@ -110,7 +110,7 @@
       const card = el('article','card');
       const head = el('div','card-head');
       text(head,'div','project',project.name);
-      text(head,'div','age',age(project.updated || project.fetchedAt));
+      text(head,'div','age',age(project.updated));
       card.append(head);
       if (project.error) text(card,'div','source-warning',project.stale ? 'Cached · Source unavailable' : 'Source unavailable');
       makeLine(card,'Status',project.status || (project.error ? 'Unavailable' : 'Not reported'));
