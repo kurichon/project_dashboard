@@ -1,5 +1,7 @@
 'use strict';
 const Core = globalThis.PulseCore;
+const PD = globalThis.PDRCCore;
+const PV = globalThis.PDRCView;
 const AUTH_SESSION_KEY = 'projectPulseAuthSessionV2';
 const AUTH_PREFS_KEY = 'projectPulseAuthPrefsV2';
 const LEGACY_CACHE_KEY = 'projectPulseCacheV1';
@@ -10,7 +12,7 @@ const APP_VERSION = chrome.runtime.getManifest().version;
 
 const $ = selector => document.querySelector(selector);
 const ui = {
-  cards: $('#cards'), empty: $('#empty'), notice: $('#notice'),
+  cards: $('#cards'), empty: $('#empty'), notice: $('#notice'), projectDetails: $('#projectDetails'),
   settingsPanel: $('#settingsPanel'), settingsBtn: $('#settingsBtn'), closeSettingsBtn: $('#closeSettingsBtn'),
   settingsForm: $('#settingsForm'), spreadsheetInput: $('#spreadsheetInput'),
   projectsTabInput: $('#projectsTabInput'), historyTabInput: $('#historyTabInput'),
@@ -80,9 +82,10 @@ async function clearToken() { await chrome.storage.session.remove(AUTH_SESSION_K
 async function changeAccount() {
   await Promise.all([
     chrome.storage.session.remove(AUTH_SESSION_KEY),
-    chrome.storage.local.remove([AUTH_PREFS_KEY, Core.CACHE_KEY, LEGACY_CACHE_KEY])
+    chrome.storage.local.remove([AUTH_PREFS_KEY, Core.CACHE_KEY, LEGACY_CACHE_KEY, PD?.CACHE_KEY].filter(Boolean))
   ]);
   ui.cards.replaceChildren();
+  if (PV) PV.clear(ui.projectDetails);
   ui.empty.hidden = true;
   ui.lastSync.textContent = '';
   ui.syncState.textContent = 'Not connected';
@@ -197,6 +200,79 @@ async function fetchRange(token, tab, columns, maxRows) {
   const body = await response.json();
   return body.values || [];
 }
+
+async function fetchPDRCProject(token, entry) {
+  const params = new URLSearchParams({majorDimension: 'ROWS', valueRenderOption: 'UNFORMATTED_VALUE'});
+  for (const range of PD.RANGES) params.append('ranges', range);
+  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + entry.sourceId + '/values:batchGet?' + params.toString();
+  const response = await fetch(url, {headers: {Authorization: 'Bearer ' + token}, cache: 'no-store'});
+  if (response.status === 401) {
+    await clearToken();
+    throw new Error('Google session expired. Select Connect Google to sign in.');
+  }
+  if (response.status === 403) throw new Error('This Google account cannot read the linked project Sheet.');
+  if (!response.ok) {
+    let detail = '';
+    try { detail = String((await response.json())?.error?.message || ''); } catch (_) {}
+    throw new Error(detail || 'Linked project Sheet returned HTTP ' + response.status + '.');
+  }
+  return PD.normalizeProject(entry, (await response.json()).valueRanges, Core.parseSheetDate);
+}
+function renderPDRC(projects, fetchedAt, cached = false) {
+  PV.render(ui.cards, ui.projectDetails, projects);
+  ui.empty.hidden = projects.length > 0;
+  const failed = projects.filter(p => p.error).length;
+  ui.syncState.textContent = cached ? 'Cached snapshot' : failed ? 'Partial sync' : 'Synced';
+  ui.lastSync.textContent = fetchedAt ? (cached ? 'Cached ' : 'Checked ') + ageText(new Date(fetchedAt)) : '';
+  setControls(!cached);
+}
+async function syncPDRC(token, masterRows, identity) {
+  const entries = PD.parseRegistry(masterRows, Core.parseSpreadsheetId);
+  const stored = await chrome.storage.local.get(PD.CACHE_KEY);
+  const old = stored[PD.CACHE_KEY];
+  const prior = new Map((old?.identity === identity && Array.isArray(old?.projects) ? old.projects : [])
+    .filter(x => x && typeof x.id === 'string').map(x => [x.id, x]));
+  const projects = new Array(entries.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < entries.length) {
+      const index = cursor++;
+      const entry = entries[index];
+      let error = entry.error;
+      if (!error) {
+        try {
+          projects[index] = await fetchPDRCProject(token, entry);
+          continue;
+        } catch (e) {
+          error = e?.message || 'Unable to read project source.';
+        }
+      }
+      const last = prior.get(entry.id);
+      if (last?.sourceId && last.sourceId === entry.sourceId && !last.error) {
+        projects[index] = {...last, name: entry.name, stale: true, error};
+      } else {
+        projects[index] = {
+          id: entry.id, name: entry.name, sourceId: entry.sourceId, status: '', next: '',
+          lifecycle: 'unknown', updated: '', count: 0, totalDeliverables: 0,
+          deliverables: [], events: [], workStates: {}, error, stale: false
+        };
+      }
+    }
+  }
+  await Promise.all(Array.from({length: Math.min(3, entries.length)}, () => worker()));
+  if (Core.sourceIdentity(settings) !== identity) return;
+  // Keep only last successful values for offline fallback; never cache an error
+  // as though it were a successful observation or show another source's values.
+  const good = projects.map(p => p.error ? prior.get(p.id) : p)
+    .filter(p => p && !p.error && entries.some(e => e.id === p.id && e.sourceId === p.sourceId));
+  const fetchedAt = new Date().toISOString();
+  await chrome.storage.local.set({[PD.CACHE_KEY]: {identity, projects: good, fetchedAt}});
+  renderPDRC(projects, fetchedAt);
+  const failed = projects.filter(p => p.error).length;
+  setNotice(failed ? failed + ' of ' + entries.length + ' project sources could not be read. ' +
+    'Any previous matching project snapshot is marked as cached; other projects remain available.' : '');
+}
+
 function ageText(date) {
   if (!date || Number.isNaN(date.getTime())) return 'Not updated';
   const min = Math.floor(Math.max(0, Date.now()-date.getTime())/60000);
@@ -217,6 +293,7 @@ function appendText(parent, className, value, title = '') {
   return node;
 }
 function render(projects, history, fetchedAt, cached) {
+  if (PV) PV.clear(ui.projectDetails);
   const {counts, rejected} = Core.historyCounts(history);
   const normalized = projects.map(p => {
     const project = String(p.project || p.name || '').trim();
@@ -248,9 +325,15 @@ function render(projects, history, fetchedAt, cached) {
   return rejected;
 }
 async function loadCache() {
-  const data = await chrome.storage.local.get(Core.CACHE_KEY);
+  const data = await chrome.storage.local.get([Core.CACHE_KEY, PD?.CACHE_KEY].filter(Boolean));
+  const identity = Core.sourceIdentity(settings);
+  const pdrcCache = PD && data[PD.CACHE_KEY];
+  if (pdrcCache?.identity === identity && Array.isArray(pdrcCache.projects)) {
+    renderPDRC(pdrcCache.projects.map(p => ({...p, stale: true})), pdrcCache.fetchedAt, true);
+    return true;
+  }
   const cache = data[Core.CACHE_KEY];
-  if (!cache || cache.identity !== Core.sourceIdentity(settings) || !Array.isArray(cache.projects) || !Array.isArray(cache.history)) return false;
+  if (!cache || cache.identity !== identity || !Array.isArray(cache.projects) || !Array.isArray(cache.history)) return false;
   render(cache.projects, cache.history, cache.fetchedAt, true);
   return true;
 }
@@ -261,7 +344,11 @@ async function sync(interactive = false) {
   if (interactive) setNotice('Choose the Google account that can read your selected Sheet.');
   try {
     const token = await getAccessToken(interactive);
-    const projectsRows = await fetchRange(token, settings.projectsTab, 'D', 2000);
+    const projectsRows = await fetchRange(token, settings.projectsTab, 'H', 2000);
+    if (PD?.isRegistryRows(projectsRows)) {
+      await syncPDRC(token, projectsRows, source);
+      return;
+    }
     Core.headerCheck(projectsRows, ['project', 'status', 'next', 'updated']);
     let historyRows = [];
     let historyError = '';
@@ -362,13 +449,14 @@ async function applySettings(updated, fromImport = false) {
   // Do not destroy the previous configuration until the replacement passed validation.
   await chrome.storage.local.set({[Core.SETTINGS_KEY]: updated});
   if (sourceChanged || authChanged || fromImport) {
-    await chrome.storage.local.remove([Core.CACHE_KEY, LEGACY_CACHE_KEY, AUTH_PREFS_KEY]);
+    await chrome.storage.local.remove([Core.CACHE_KEY, LEGACY_CACHE_KEY, AUTH_PREFS_KEY, PD?.CACHE_KEY].filter(Boolean));
     await clearToken();
   }
   if (repoChanged) await chrome.storage.local.remove(Core.UPDATE_KEY);
   settings = updated;
   if (sourceChanged || authChanged || fromImport) {
     ui.cards.replaceChildren();
+    if (PV) PV.clear(ui.projectDetails);
     ui.empty.hidden = true;
     ui.lastSync.textContent = '';
     setControls(false);
