@@ -224,7 +224,7 @@ function renderPDRC(projects, fetchedAt, cached = false) {
   PV.render(ui.cards, ui.projectDetails, projects);
   ui.empty.hidden = projects.length > 0;
   const failed = projects.filter(p => p.error).length;
-  ui.syncState.textContent = cached ? 'Cached snapshot' : failed ? 'Partial sync' : 'Synced';
+  ui.syncState.textContent = cached ? 'Cached snapshot' : failed ? 'Partial sync' : 'Sources loaded';
   ui.lastSync.textContent = fetchedAt ? (cached ? 'Cached ' : 'Checked ') + ageText(new Date(fetchedAt)) : '';
   setControls(!cached);
 }
