@@ -77,8 +77,8 @@ test('rejects project identity mismatches, unknown contract versions, duplicate 
   assert.throws(()=>P.normalizeProject(entry,broken,Core.parseSheetDate),/contract version/);
   const dup=data();dup[2].values.push([...dup[2].values[1]]);
   const p=P.normalizeProject(entry,dup,Core.parseSheetDate);
-  assert.equal(p.invalidHistory,1);
-  assert.equal(p.historyCount,3);
+  assert.equal(p.invalidHistory,2);
+  assert.equal(p.historyCount,2);
 });
 test('empty structured deliverables is valid but does not imply completed or 0 percent', () => {
   const [entry]=P.parseRegistry(registry,Core.parseSpreadsheetId);
