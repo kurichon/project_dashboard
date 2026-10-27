@@ -27,23 +27,24 @@
       <div class="settings-head">
         <div>
           <h2 id="settingsTitle">Your data source</h2>
-          <p>Choose your own private Google Spreadsheet. Project Dashboard never publishes its contents.</p>
+          <p>Use a private Project Pulse Sheet or a PDRC master registry. The dashboard only reads project data.</p>
         </div>
         <button id="closeSettingsBtn" class="button secondary" type="button">Close</button>
       </div>
       <form id="settingsForm" autocomplete="off">
         <div class="fields">
           <label class="field wide">
-            <span>Google Spreadsheet URL or ID</span>
+            <span>Master Google Spreadsheet URL or ID</span>
             <input id="spreadsheetInput" type="text" placeholder="Paste https://docs.google.com/spreadsheets/d/…" spellcheck="false" />
             <small>Paste the Sheet URL, not a Drive folder URL. The data remains private in your Google account.</small>
           </label>
           <label class="field">
-            <span>Projects tab</span>
-            <input id="projectsTabInput" type="text" placeholder="Projects" spellcheck="false" />
+            <span>Projects or Registry tab</span>
+            <input id="projectsTabInput" type="text" placeholder="Projects or Registry" spellcheck="false" />
+            <small>Use Projects for legacy Project Pulse or Registry for standardized per-project PDRC sources.</small>
           </label>
           <label class="field">
-            <span>History tab (optional)</span>
+            <span>History tab (legacy mode only)</span>
             <input id="historyTabInput" type="text" placeholder="History" spellcheck="false" />
           </label>
           <label class="field wide">
@@ -80,18 +81,21 @@
     </section>
     <section id="notice" class="notice" hidden role="status"></section>
     <section id="cards" class="cards" aria-live="polite"></section>
+    <section id="projectDetails" class="details-panel" tabindex="-1" hidden aria-label="Selected project details"></section>
     <section id="empty" class="empty" hidden>
       <h2>No project statuses yet</h2>
-      <p>Configure a Google Sheet with <strong>Project, Status, Next, Updated</strong> columns.</p>
+      <p>Connect a legacy Projects Sheet or a PDRC Registry linking private project sheets.</p>
     </section>
     <footer>
-      <span>Your private Sheet → this browser only</span>
+      <span>Private Sheets → read-only browser view</span>
       <span id="lastSync"></span>
       <span id="versionInfo" aria-label="Installed application version"></span>
     </footer>
   </main>
   <script src="config.js"></script>
   <script src="pulse-core.js"></script>
+  <script src="pdrc-core.js"></script>
+  <script src="pdrc-view.js"></script>
   <script src="newtab.js"></script>
 </body>
 </html>
