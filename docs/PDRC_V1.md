@@ -5,15 +5,15 @@ The existing v1.4.1 Google Sheets reader remains supported and is not removed by
 
 ## Source selection
 
-The new-tab extension uses the current read-only \`spreadsheets.readonly\` OAuth scope;
+The new-tab extension uses the current read-only `spreadsheets.readonly` OAuth scope;
 no Drive-wide or write permissions are requested.
 
-**Legacy source:** Select the original master Google Sheet and \`Projects\` /
-\`History\` tabs. Existing settings, account-selection logic and cache keys remain valid.
+**Legacy source:** Select the original master Google Sheet and `Projects` /
+`History` tabs. Existing settings, account-selection logic and cache keys remain valid.
 
 **PDRC source:** Select the *standardized master registry* Google Sheet and
 set **Projects or Registry tab = Registry**. The extension recognizes the registry's
-headers, resolves each enabled project's \`source_ref\` as a Google Sheet URL, and
+headers, resolves each enabled project's `source_ref` as a Google Sheet URL, and
 reads the standardized project workbook. The legacy History tab setting is ignored
 in this mode.
 
@@ -24,11 +24,11 @@ Never commit personal OAuth client IDs, Sheet URLs, or cached project records.
 
 The required tab has these headers:
 
-\`project_id | name | source_type | source_ref | contract_version | enabled\`
+`project_id | name | source_type | source_ref | contract_version | enabled`
 
-Optional columns include \`profile\`, \`migration_state\`. IDs must be stable,
-lowercase, unique and URL-safe. \`enabled\` accepts \`TRUE\` or \`FALSE\` (and 1/0 or yes/no).
-Current candidate supports only \`source_type=google_sheets\` and \`contract_version=1.0\`.
+Optional columns include `profile`, `migration_state`. IDs must be stable,
+lowercase, unique and URL-safe. `enabled` accepts `TRUE` or `FALSE` (and 1/0 or yes/no).
+Current candidate supports only `source_type=google_sheets` and `contract_version=1.0`.
 Unknown or invalid sources are displayed as unavailable rather than fetched.
 Requests to arbitrary domains or database endpoints are not permitted.
 
@@ -41,13 +41,13 @@ and the established Google Sheets API hostname.
 Each project source contains five tabs with stable headers, even when optional
 record sets are empty:
 
-* \`Overview\`: identity, lifecycle, phase, status, next action, update timestamp
-* \`Deliverables\`: features, milestones, tasks, gates and optional verification details
-* \`History\`: stable event IDs, project association, timestamps and progress updates
-* \`Evidence\`: optional references supporting specific deliverables or validations
-* \`Source\`: contract version, identity and *upstream provenance*
+* `Overview`: identity, lifecycle, phase, status, next action, update timestamp
+* `Deliverables`: features, milestones, tasks, gates and optional verification details
+* `History`: stable event IDs, project association, timestamps and progress updates
+* `Evidence`: optional references supporting specific deliverables or validations
+* `Source`: contract version, identity and *upstream provenance*
 
-The \`Source.source_ref\` points to the **origin** (for example the original Project
+The `Source.source_ref` points to the **origin** (for example the original Project
 Pulse Sheet or GitHub feature register). It is intentionally different from the
 standardized Sheet URL stored in the Registry.
 
@@ -59,7 +59,7 @@ unknown, not failed, zero-percent or completed.
 ## Updates and migration cutover
 
 This branch is a **read-only consumer**. It never modifies project workbooks.
-Migrated staging records have \`Source.snapshot_kind=snapshot\`; the dashboard
+Migrated staging records have `Source.snapshot_kind=snapshot`; the dashboard
 labels them as imported snapshots so a successful fetch cannot be mistaken for
 a fresh progress update.
 
@@ -79,9 +79,9 @@ both legacy and PDRC caches to prevent cross-account project disclosure.
 
 ## Verification
 
-\`node --test tests/*.test.cjs\` checks schemas and existing auth/release behavior.
+`node --test tests/*.test.cjs` checks schemas and existing auth/release behavior.
 
-\`python tests/browser-pdrc-smoke.py\` exercises the actual new-tab JavaScript
+`python tests/browser-pdrc-smoke.py` exercises the actual new-tab JavaScript
 and DOM with synthetic Google responses (no Google credentials), including
 details, partial Sheet failures and account switching.
 
