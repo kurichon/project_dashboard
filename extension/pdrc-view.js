@@ -47,6 +47,7 @@
     close.addEventListener('click', () => { host.hidden = true; selectedId = ''; });
     head.append(close);
     host.append(head);
+    if (project.snapshotKind === 'snapshot') text(host,'p','snapshot-note','Migration snapshot. Future progress will not appear here until its external writer is redirected.');
     if (project.error) {
       text(host,'p','details-error',project.error);
       if (project.stale) text(host,'p','detail-subtle','Last good snapshot is shown below.');
