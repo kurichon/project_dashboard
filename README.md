@@ -6,6 +6,19 @@ Project Dashboard reads a **user-selected private Google Sheet**. The open-sourc
 
 **Distribution:** [GitHub Releases](https://github.com/kurichon/project_dashboard/releases), without the Chrome Web Store. The latest v1.4.1 source is a candidate until verified in a real Brave installation.
 
+## Unreleased PDRC v1 source option
+
+A development branch adds a **read-only standardized project registry**.
+Point Settings at your private master registry Sheet and set the tab to `Registry`.
+The registry links to individual standardized project Sheets containing
+Overview, Deliverables, History, Evidence and Source tabs. The dashboard can
+show project summaries, deliverable coverage and recent timeline records.
+
+**Do not switch upstream writers yet.** Staged migrations are historical snapshots
+until external software explicitly writes future updates to each project source.
+The published v1.4.1 path and the existing `Projects` / `History` reader are
+unchanged. For schema and the cutover gates, see [PDRC v1](docs/PDRC_V1.md).
+
 ## Features
 
 - Compact cards for each project: current status, next action, last update, and recent activity.
