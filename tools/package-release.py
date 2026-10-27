@@ -16,6 +16,7 @@ EXTENSION_FILES = (
 EXTRAS = (
     'Update Project Dashboard.cmd', 'tools/upgrade-local.ps1','tools/update-from-github.ps1',
     'README.md','LICENSE','PRIVACY.md','SECURITY.md','CHANGELOG.md','docs/GITHUB_RELEASES.md',
+    'docs/PDRC_V1.md',
 )
 
 
