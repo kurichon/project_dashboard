@@ -95,11 +95,12 @@
       eventIds.add(eventId);
       const parsed = parseDate(row.occurred_at);
       const time = parsed?.getTime();
-      if (!Number.isFinite(time)) invalidHistory++;
-      else if (time <= now + 60000) {
-        if (lastActivityMs === null || time > lastActivityMs) lastActivityMs = time;
-        if (time >= now - RECENT_MS) recent++;
+      if (!Number.isFinite(time) || time > now + 60000) {
+        invalidHistory++;
+        continue;
       }
+      if (lastActivityMs === null || time > lastActivityMs) lastActivityMs = time;
+      if (time >= now - RECENT_MS) recent++;
       events.push({
         id: eventId, at: string(row.occurred_at), precision: string(row.precision),
         type: string(row.event_type), status: string(row.status_text), next: string(row.next_action),
