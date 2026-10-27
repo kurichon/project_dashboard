@@ -142,7 +142,8 @@
       count: recent, historyCount: events.length, lastActivity: lastActivityMs === null ? '' : new Date(lastActivityMs).toISOString(),
       deliverables: items, events: events.slice(0, 60), evidenceCount: evidence.length,
       totalDeliverables: items.length, verified, workStates: {...workStates}, kinds: {...kinds},
-      invalidHistory, invalidDeliverables, fetchedAt: new Date(now).toISOString(),
+      invalidHistory, invalidDeliverables, snapshotKind: string(source[0].snapshot_kind) || 'unknown',
+      fetchedAt: new Date(now).toISOString(),
       stale: false, error: ''
     };
   }
