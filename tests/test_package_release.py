@@ -21,6 +21,8 @@ class GitHubPackage(unittest.TestCase):
             with ZipFile(archive) as z:
                 names=set(z.namelist())
                 self.assertIn('extension/manifest.json',names)
+                self.assertIn('extension/pdrc-core.js',names)
+                self.assertIn('extension/pdrc-view.js',names)
                 self.assertIn('tools/upgrade-local.ps1',names)
                 self.assertIn('tools/update-from-github.ps1',names)
                 self.assertIn('Update Project Dashboard.cmd',names)
