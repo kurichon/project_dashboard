@@ -278,8 +278,10 @@ async function syncPDRC(token, masterRows, identity) {
   await chrome.storage.local.set({[PD.CACHE_KEY]: {identity, projects: good, fetchedAt}});
   renderPDRC(projects, fetchedAt);
   const failed = projects.filter(p => p.error).length;
+  const snapshots = projects.filter(p => p.snapshotKind === 'snapshot').length;
   setNotice(failed ? failed + ' of ' + entries.length + ' project sources could not be read. ' +
-    'Any previous matching project snapshot is marked as cached; other projects remain available.' : '');
+    'Any previous matching project snapshot is marked as cached; other projects remain available.' :
+    snapshots ? snapshots + ' migrated project reports are staging snapshots. External writers have not been redirected.' : '');
 }
 
 function ageText(date) {
