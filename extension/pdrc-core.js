@@ -76,8 +76,12 @@
       throw new Error('Project identity does not match the master registry.');
     }
     if (string(source[0].contract_version) !== CONTRACT_VERSION) throw new Error('Source contract version mismatch.');
-    if (string(source[0].source_type) !== entry.sourceType) throw new Error('Source type mismatch.');
-    if (string(source[0].source_ref) !== entry.sourceRef) throw new Error('Source provenance does not match the registry.');
+    // Source describes upstream provenance (e.g. GitHub or the legacy master Sheet).
+    // The Registry instead points at this standardized reporting Sheet; the two URLs
+    // and types are intentionally different, and must not be compared as identities.
+    if (!string(source[0].source_type) || !string(source[0].source_ref)) {
+      throw new Error('Source provenance is incomplete.');
+    }
     const overviewRow = overview[0];
     let invalidHistory = 0, lastActivityMs = null, recent = 0;
     const events = [];
