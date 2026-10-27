@@ -89,7 +89,7 @@ async def main():
     await page.evaluate(MOCK)
     for file in ('config.js','pulse-core.js','pdrc-core.js','pdrc-view.js','newtab.js'):
       await page.add_script_tag(content=(ROOT/'extension'/file).read_text())
-    await page.wait_for_function("document.querySelector('#syncState').textContent==='Synced'")
+    await page.wait_for_function("document.querySelector('#syncState').textContent==='Sources loaded'")
     assert await page.locator('.card').count()==2,await page.locator('#notice').inner_text()
     assert '2 deliverables' in await page.locator('.card').first.inner_text()
     assert 'Project Alpha' in await page.locator('.card').first.inner_text()
