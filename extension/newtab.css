@@ -168,6 +168,7 @@ footer {
 
 
 /* PDRC v1 read-only portfolio and project details. */
+.snapshot-note { color: var(--muted); font-size: 11px; margin-top: 10px; line-height: 1.45; }
 .card .meta { flex-wrap: wrap; line-height: 1.4; }
 .card-actions { display: flex; margin-top: 12px; justify-content: flex-end; }
 .card-actions .button { font-size: 11px; }
