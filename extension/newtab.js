@@ -208,7 +208,9 @@ async function fetchPDRCProject(token, entry) {
   const response = await fetch(url, {headers: {Authorization: 'Bearer ' + token}, cache: 'no-store'});
   if (response.status === 401) {
     await clearToken();
-    throw new Error('Google session expired. Select Connect Google to sign in.');
+    const error = new Error('Google session expired. Select Connect Google to sign in.');
+    error.code = 'ACCOUNT_EXPIRED';
+    throw error;
   }
   if (response.status === 403) throw new Error('This Google account cannot read the linked project Sheet.');
   if (!response.ok) {
@@ -234,6 +236,7 @@ async function syncPDRC(token, masterRows, identity) {
     .filter(x => x && typeof x.id === 'string').map(x => [x.id, x]));
   const projects = new Array(entries.length);
   let cursor = 0;
+  let expired = false;
   async function worker() {
     while (cursor < entries.length) {
       const index = cursor++;
@@ -244,6 +247,7 @@ async function syncPDRC(token, masterRows, identity) {
           projects[index] = await fetchPDRCProject(token, entry);
           continue;
         } catch (e) {
+          if (e?.code === 'ACCOUNT_EXPIRED') expired = true;
           error = e?.message || 'Unable to read project source.';
         }
       }
@@ -260,6 +264,11 @@ async function syncPDRC(token, masterRows, identity) {
     }
   }
   await Promise.all(Array.from({length: Math.min(3, entries.length)}, () => worker()));
+  if (expired) {
+    const error = new Error('Google session expired. Select Connect Google to sign in.');
+    error.code = 'ACCOUNT_EXPIRED';
+    throw error;
+  }
   if (Core.sourceIdentity(settings) !== identity) return;
   // Keep only last successful values for offline fallback; never cache an error
   // as though it were a successful observation or show another source's values.
