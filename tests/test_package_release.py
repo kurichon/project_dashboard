@@ -28,6 +28,7 @@ class GitHubPackage(unittest.TestCase):
                 self.assertIn('Update Project Dashboard.cmd',names)
                 self.assertIn('LICENSE',names)
                 self.assertIn('docs/GITHUB_RELEASES.md',names)
+                self.assertIn('docs/PDRC_V1.md',names)
                 self.assertNotIn('manifest.json',names)
                 self.assertNotIn('docs/WEB_STORE_RELEASE.md',names)
                 self.assertNotIn('extension/background.js',names)
