@@ -165,3 +165,33 @@ footer {
 .settings-message { margin: 8px 0 0; min-height: 16px; }
 #versionInfo { white-space: nowrap; }
 @media (max-width: 760px) { footer { flex-wrap: wrap; } }
+
+
+/* PDRC v1 read-only portfolio and project details. */
+.snapshot-note { color: var(--muted); font-size: 11px; margin-top: 10px; line-height: 1.45; }
+.card .meta { flex-wrap: wrap; line-height: 1.4; }
+.card-actions { display: flex; margin-top: 12px; justify-content: flex-end; }
+.card-actions .button { font-size: 11px; }
+.source-warning { color: var(--danger); font-size: 12px; margin-top: 12px; }
+.details-panel {
+  margin-top: 20px; padding: 23px; border: 1px solid var(--border);
+  background: var(--panel); border-radius: 14px;
+}
+.details-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.details-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.details-head h2 { font-size: 23px; margin: 0; letter-spacing: -.02em; }
+.detail-summary { padding: 6px 0 16px; border-bottom: 1px solid var(--border); }
+.detail-section { padding-top: 18px; }
+.detail-section h3 { margin: 0 0 12px; font-size: 15px; }
+.detail-subtle { color: var(--soft); font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.details-error { color: var(--danger); font-size: 13px; }
+.detail-scroll { overflow-x: auto; max-height: 500px; overflow-y: auto; border: 1px solid var(--border); border-radius: 9px; }
+.detail-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.detail-table th, .detail-table td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.detail-table th { position: sticky; top: 0; background: var(--bg); color: var(--soft); z-index: 1; font-weight: 650; }
+.detail-table td:first-child { white-space: nowrap; }
+.timeline-entry { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.timeline-date { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+.timeline-state { line-height: 1.5; font-size: 12px; overflow-wrap: anywhere; max-height: 5em; overflow: hidden; }
+.source-link { display: inline-block; color: var(--accent); margin-top: 20px; font-size: 12px; }
+@media(max-width: 760px) { .details-panel { padding: 16px; } .details-head { flex-direction: column; } }

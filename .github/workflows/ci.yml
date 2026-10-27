@@ -32,6 +32,7 @@ jobs:
           python -m playwright install --with-deps chromium
           python tests/browser-github-smoke.py
           python tests/browser-auth-smoke.py
+          python tests/browser-pdrc-smoke.py
       - uses: actions/upload-artifact@v4
         with:
           name: project-dashboard-github-release-candidate
