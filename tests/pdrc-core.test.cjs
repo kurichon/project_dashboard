@@ -61,8 +61,9 @@ test('normalizes feature gates without confusing wired code with verified softwa
   assert.equal(p.workStates.in_progress,1);
   assert.equal(p.workStates.unknown,1);
   assert.equal(p.count,2);
-  assert.equal(p.historyCount,3);
-  assert.equal(p.events[0].id,'future');
+  assert.equal(p.historyCount,2);
+  assert.equal(p.invalidHistory,1);
+  assert.equal(p.events[0].id,'two');
   assert.equal(p.lifecycle,'unknown');
 });
 test('source provenance may differ from standardized reporting source', () => {
